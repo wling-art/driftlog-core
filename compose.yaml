@@ -1,0 +1,27 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://driftlog:driftlog@postgres:5432/driftlog
+      REDIS_URL: redis://valkey:6379
+      MEILI_URL: http://meilisearch:7700
+    ports: ["3900:3900"]
+    volumes: ["data:/data"]
+    depends_on: [postgres, valkey, meilisearch]
+    restart: unless-stopped
+  postgres:
+    image: postgres:18
+    environment: { POSTGRES_USER: driftlog, POSTGRES_PASSWORD: driftlog, POSTGRES_DB: driftlog }
+    volumes: ["pg:/var/lib/postgresql"]
+    restart: unless-stopped
+  valkey:
+    image: valkey/valkey:8
+    volumes: ["valkey:/data"]
+    restart: unless-stopped
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    environment: { MEILI_MASTER_KEY: "${MEILI_KEY}", MEILI_NO_ANALYTICS: "true" }
+    volumes: ["meili:/meili_data"]
+    restart: unless-stopped
+volumes: { data: {}, pg: {}, valkey: {}, meili: {} }

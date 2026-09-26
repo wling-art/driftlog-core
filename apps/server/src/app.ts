@@ -1,0 +1,66 @@
+import { Elysia } from "elysia"
+import { cors } from "@elysiajs/cors"
+import { openapi } from "@elysiajs/openapi"
+import { z } from "zod"
+import { env } from "./env"
+import { log } from "./lib/log"
+import { rateLimit } from "./lib/redis"
+import { search } from "./lib/search"
+import { onlineChanged, TOPIC } from "./lib/realtime"
+import { authPlugin } from "./auth"
+import { adminEntries, publicEntries } from "./routes/entries"
+import { categoryRoutes } from "./routes/categories"
+import { clientIp, commentRoutes } from "./routes/comments"
+import { fileRoutes } from "./routes/files"
+import { adminRoutes } from "./routes/admin"
+
+export const app = new Elysia()
+  .use(cors({ origin: [env.BLOG_URL, env.ADMIN_URL], credentials: true }))
+  .use(
+    openapi({
+      path: "/openapi",
+      provider: "scalar",
+      mapJsonSchema: { zod: z.toJSONSchema },
+      documentation: { info: { title: "Driftlog API", version: "0.1.0" } },
+    }),
+  )
+  .onError(({ code, error, path }) => {
+    if (code === "VALIDATION" || code === "NOT_FOUND") return
+    log.error({ err: error, path }, "request failed")
+  })
+  .get("/health", () => ({ ok: true }))
+  .use(authPlugin)
+  .use(publicEntries)
+  .use(adminEntries)
+  .use(categoryRoutes)
+  .use(commentRoutes)
+  .use(fileRoutes)
+  .use(adminRoutes)
+  .get(
+    "/search",
+    async ({ query, request, server, status }) => {
+      if (!(await rateLimit(`search:${clientIp(request, server?.requestIP(request)?.address)}`, 30, 10)))
+        return status(429, "搜得太快了")
+      return search(query.q, query.limit)
+    },
+    {
+      query: z.object({
+        q: z.string().min(1).max(100),
+        limit: z.coerce.number().int().min(1).max(20).default(8),
+      }),
+      tags: ["search"],
+    },
+  )
+  .ws("/ws", {
+    open(ws) {
+      ws.subscribe(TOPIC)
+      onlineChanged(1)
+    },
+    close(ws) {
+      ws.unsubscribe(TOPIC)
+      onlineChanged(-1)
+    },
+    message() {},
+  })
+
+export type App = typeof app

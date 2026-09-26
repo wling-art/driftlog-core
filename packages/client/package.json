@@ -1,0 +1,12 @@
+{
+  "name": "@driftlog/client",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@driftlog/schema": "workspace:*",
+    "@driftlog/server": "workspace:*",
+    "@elysiajs/eden": "catalog:"
+  }
+}

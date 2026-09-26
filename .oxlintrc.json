@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": { "correctness": "error" },
+  "rules": { "no-underscore-dangle": "off" },
+  "ignorePatterns": ["dist", "packages/db/drizzle"]
+}

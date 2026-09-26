@@ -1,0 +1,36 @@
+{
+  "name": "driftlog-core",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "zod": "^4.6.5",
+      "elysia": "^1.4.30",
+      "@elysiajs/eden": "^1.4.9",
+      "drizzle-orm": "^0.45.3",
+      "@types/bun": "latest",
+      "@typescript/native-preview": "7.0.0-dev.20260707.2"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "bun --filter @driftlog/server dev",
+    "typecheck": "tsgo --noEmit -p .",
+    "lint": "oxlint",
+    "fmt": "oxfmt",
+    "test": "bun test",
+    "db:generate": "bun --filter @driftlog/db generate",
+    "db:migrate": "bun --filter @driftlog/db migrate",
+    "build": "bun --filter @driftlog/server build"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0"
+  },
+  "license": "AGPL-3.0-only"
+}

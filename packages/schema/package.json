@@ -1,0 +1,10 @@
+{
+  "name": "@driftlog/schema",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  }
+}

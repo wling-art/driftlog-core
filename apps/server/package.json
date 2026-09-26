@@ -1,0 +1,37 @@
+{
+  "name": "@driftlog/server",
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts"
+  },
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "build": "bun build src/index.ts --compile --minify --sourcemap --outfile dist/driftlog-server"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "^1.7.6",
+    "@driftlog/db": "workspace:*",
+    "@driftlog/markdown": "workspace:*",
+    "@driftlog/schema": "workspace:*",
+    "@elysiajs/cors": "^1.4.2",
+    "@elysiajs/openapi": "^1.4.16",
+    "@react-email/components": "^1.0.12",
+    "@sentry/bun": "^11.0.0",
+    "ai": "^7.0.116",
+    "better-auth": "^1.7.6",
+    "bullmq": "^6.3.9",
+    "drizzle-orm": "catalog:",
+    "elysia": "catalog:",
+    "meilisearch": "^0.62.0",
+    "pino": "^10.3.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "reflect-metadata": "^0.2.2",
+    "resend": "^6.30.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0"
+  }
+}
