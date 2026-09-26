@@ -49,17 +49,17 @@ docker compose up -d   # api + postgres 18 + valkey + meilisearch，/data 卷放
 
 ## Markdown 扩展语法
 
-| 写法 | 效果 |
-| --- | --- |
-| `\|\|剧透\|\|` `==标记==` `++插入++` | 剧透 / 高亮 / 插入 |
-| `{GH@user}` `{TW@user}` `{TG@user}` | 提及 |
-| `:::banner{type=warning}` … `:::` | 横幅：info / warning / error / success |
-| `:::details[标题]` … `:::` | 折叠 |
-| `:::grid{cols=3}` / `:::gallery` | 网格 / 画廊 |
-| `::link-card{url="https://…"}` | 链接卡片（服务端用 HTMLRewriter 抓 og 信息） |
-| `::video{src=…}` `::bilibili{bv=BV…}` | 白名单组件，其他 `::name` 显示为「不支持」 |
-| `$…$` / `$$…$$` | KaTeX |
-| ` ```mermaid ` | 前台按需加载 Mermaid |
+| 写法                                  | 效果                                         |
+| ------------------------------------- | -------------------------------------------- |
+| `\|\|剧透\|\|` `==标记==` `++插入++`  | 剧透 / 高亮 / 插入                           |
+| `{GH@user}` `{TW@user}` `{TG@user}`   | 提及                                         |
+| `:::banner{type=warning}` … `:::`     | 横幅：info / warning / error / success       |
+| `:::details[标题]` … `:::`            | 折叠                                         |
+| `:::grid{cols=3}` / `:::gallery`      | 网格 / 画廊                                  |
+| `::link-card{url="https://…"}`        | 链接卡片（服务端用 HTMLRewriter 抓 og 信息） |
+| `::video{src=…}` `::bilibili{bv=BV…}` | 白名单组件，其他 `::name` 显示为「不支持」   |
+| `$…$` / `$$…$$`                       | KaTeX                                        |
+| ` ```mermaid `                        | 前台按需加载 Mermaid                         |
 
 评论只开行内语法，并经过 rehype-sanitize。
 

@@ -67,6 +67,12 @@ export const reorderInput = z.object({ ids: z.array(z.number().int()) })
 export const wsEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("online"), count: z.number() }),
   z.object({ type: z.literal("comment.created"), entryId: z.number(), commentId: z.number() }),
-  z.object({ type: z.literal("entry.published"), entryId: z.number(), slug: z.string(), title: z.string() }),
+  z.object({
+    type: z.literal("entry.published"),
+    entryId: z.number(),
+    entryType,
+    slug: z.string(),
+    title: z.string(),
+  }),
 ])
 export type WsEvent = z.infer<typeof wsEvent>

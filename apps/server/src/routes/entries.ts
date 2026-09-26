@@ -212,5 +212,11 @@ async function afterSave(e: typeof entries.$inferSelect, bodyChanged: boolean, w
   await invalidate()
   await enqueue("entry.saved", { id: e.id, bodyChanged })
   if (e.published && !wasPublished)
-    await broadcast({ type: "entry.published", entryId: e.id, slug: e.slug, title: e.title })
+    await broadcast({
+      type: "entry.published",
+      entryId: e.id,
+      entryType: e.type,
+      slug: e.slug,
+      title: e.title,
+    })
 }

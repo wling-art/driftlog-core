@@ -47,14 +47,19 @@ export async function search(q: string, limit = 10) {
     attributesToCrop: ["text"],
     cropLength: 40,
     attributesToHighlight: ["title", "text"],
-    highlightPreTag: "<mark>",
-    highlightPostTag: "</mark>",
+    // 用控制字符占位，先转义再换成 <mark>：前台会把结果当 HTML 渲染
+    highlightPreTag: "\u0001",
+    highlightPostTag: "\u0002",
   })
   return r.hits.map((h) => ({
     id: h.id as number,
     type: h.type as string,
     slug: h.slug as string,
-    title: (h._formatted?.title as string) ?? (h.title as string),
-    snippet: (h._formatted?.text as string) ?? "",
+    title: highlight((h._formatted?.title as string) ?? (h.title as string)),
+    snippet: highlight((h._formatted?.text as string) ?? ""),
   }))
 }
+
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+export const highlight = (s: string) =>
+  escapeHtml(s).replaceAll("\u0001", "<mark>").replaceAll("\u0002", "</mark>")
