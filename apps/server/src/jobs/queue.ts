@@ -1,6 +1,6 @@
 import { Queue, Worker, createBunRedisClient, type Job } from "bullmq"
 import { RedisClient } from "bun"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { comments, entries, translations, user } from "@driftlog/db"
 import { renderMarkdown } from "@driftlog/markdown"
 import { env } from "../env"
@@ -46,7 +46,7 @@ const handlers: { [N in Name]: (data: Jobs[N]) => Promise<unknown> } = {
     if (!aiEnabled || !e?.published || e.type === "page" || (e.summary && !bodyChanged)) return
     await db
       .update(entries)
-      .set({ summary: await summarize(e.title, e.body) })
+      .set({ summary: await summarize(e.title, e.body), updatedAt: sql`${entries.updatedAt}` }) // AI 摘要不算作者改过
       .where(eq(entries.id, id))
     await invalidate()
   },

@@ -114,7 +114,7 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
       // 阅读数不走缓存
       void db
         .update(entries)
-        .set({ views: sql`${entries.views} + 1` })
+        .set({ views: sql`${entries.views} + 1`, updatedAt: sql`${entries.updatedAt}` }) // 计数不算「更新」
         .where(eq(entries.id, e.id))
         .execute()
       return e
@@ -211,7 +211,7 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
       const [e] = fresh
         ? await db
             .update(entries)
-            .set({ likes: sql`${entries.likes} + 1` })
+            .set({ likes: sql`${entries.likes} + 1`, updatedAt: sql`${entries.updatedAt}` })
             .where(and(eq(entries.id, params.id), eq(entries.published, true)))
             .returning({ likes: entries.likes })
         : await db.select({ likes: entries.likes }).from(entries).where(eq(entries.id, params.id))

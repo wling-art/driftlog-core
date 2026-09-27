@@ -93,10 +93,7 @@ const settings: SiteSettings = {
     ),
   },
 }
-await db
-  .insert(siteSettings)
-  .values({ id: 1, value: settings })
-  .onConflictDoNothing() // 站点设置导过一次就归后台管：重复跑不覆盖后台改过的
+await db.insert(siteSettings).values({ id: 1, value: settings }).onConflictDoNothing() // 站点设置导过一次就归后台管：重复跑不覆盖后台改过的
 console.log(`站点设置：${settings.title}`)
 
 // ---------- 分类、专栏 ----------
