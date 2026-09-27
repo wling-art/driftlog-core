@@ -151,7 +151,15 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
     ({ query }) =>
       cached(`index:${JSON.stringify(query)}`, 600, () =>
         db
-          .select({ slug: entries.slug, title: entries.title, publishedAt: entries.publishedAt })
+          .select({
+            slug: entries.slug,
+            title: entries.title,
+            publishedAt: entries.publishedAt,
+            // 手记时间线上那行小字：专栏 · 心情 · 天气
+            mood: entries.mood,
+            weather: entries.weather,
+            topic: topics.name,
+          })
           .from(entries)
           .leftJoin(categories, eq(entries.categoryId, categories.id))
           .leftJoin(topics, eq(entries.topicId, topics.id))
