@@ -49,4 +49,4 @@ The import downloads old images from `mixspace.crashvibe.cn/api/v3/objects/…` 
 
 - Shared validation lives in `packages/schema` and is used by the server, OpenAPI, and both web apps' forms.
 - Optional integrations (AI, Resend, Sentry, S3, OAuth) turn off silently when their env vars are missing. Keep that behavior.
-- First sign-up becomes the owner (the only one); everyone after is a reader. Readers can register with email (or GitHub/Google) on the blog to comment; the admin only lets the owner in (`/admin/*` is owner-only).
+- First sign-up (email) becomes the owner, the only one. After that email sign-up is blocked: readers sign in with GitHub / Google only (like mx-space), which needs `GITHUB_CLIENT_ID/SECRET` or `GOOGLE_…` in `.env`; `GET /site` lists the configured ones in `oauth`. The admin only lets the owner in (`/admin/*` is owner-only).

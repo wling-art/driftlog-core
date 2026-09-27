@@ -24,7 +24,7 @@ import {
 import { renderComment, renderMarkdown } from "@driftlog/markdown"
 import { db } from "../lib/db"
 import { cached, invalidate, rateLimit, redis } from "../lib/redis"
-import { authPlugin } from "../auth"
+import { authPlugin, oauthProviders } from "../auth"
 import { clientIp } from "./comments"
 
 /*
@@ -52,7 +52,7 @@ const ipOf = (request: Request, server: { requestIP(r: Request): { address: stri
   clientIp(request, server?.requestIP(request)?.address)
 
 export const extrasRoutes = new Elysia({ tags: ["extras"] })
-  .get("/site", () => getSettings())
+  .get("/site", async () => ({ ...(await getSettings()), oauth: oauthProviders }))
   .get("/topics", () =>
     cached("topics", 600, () =>
       db

@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth"
+import { APIError, createAuthMiddleware } from "better-auth/api"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { passkey } from "@better-auth/passkey"
 import { count, eq } from "drizzle-orm"
@@ -40,18 +41,31 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        // 第一个注册的人是站长；之后注册的都是读者（前台登录来评论），后台只认站长
+        // 第一个注册的人是站长；之后的都是读者（前台用 GitHub / Google 登录来评论），后台只认站长
         before: async (u) => ({ data: { ...u, role: (await ownerExists()) ? "reader" : "owner" } }),
       },
     },
   },
-  // 读者可以用邮箱注册（前台登录后评论不用再填名字邮箱）；站长只有一个：第一个注册的人，见上面的 databaseHooks。
-  // 注册、登录都限流（Better Auth 默认只在生产环境开，这里开发也开）
+  hooks: {
+    // 和 mx-space 一样：读者只能用 GitHub / Google 登录（第一次登录就是注册）；邮箱注册只给第一次建站、建站长用
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/sign-up/email" && (await ownerExists()))
+        throw new APIError("FORBIDDEN", { message: "读者请用 GitHub 或 Google 登录" })
+    }),
+  },
+  // 登录限流（Better Auth 默认只在生产环境开，这里开发也开）
   rateLimit: { enabled: true },
   advanced: isProd ? { defaultCookieAttributes: { sameSite: "none", secure: true } } : {},
 })
 
 export type Session = typeof auth.$Infer.Session
+
+/** 配好了的第三方登录（前台只显示这些按钮） */
+export const oauthProviders = (["github", "google"] as const).filter((p) =>
+  p === "github"
+    ? env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+    : env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET,
+)
 
 /** 挂上 Better Auth，并提供 { owner: true } / { session: true } 两个宏 */
 export const authPlugin = new Elysia({ name: "auth" }).mount(auth.handler).macro({
