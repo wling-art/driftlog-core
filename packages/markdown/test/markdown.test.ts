@@ -41,6 +41,12 @@ test("代码高亮、公式、mermaid、目录", async () => {
   expect(r.toc).toEqual([{ depth: 2, id: "第一节", text: "第一节" }])
 })
 
+test("excalidraw 块原样留给前台画", async () => {
+  const r = await renderMarkdown('```excalidraw\n{"type":"excalidraw/clipboard","elements":[]}\n```')
+  expect(r.html).toContain('<pre class="excalidraw">{"type":"excalidraw/clipboard"')
+  expect(r.html).not.toContain("shiki")
+})
+
 test("评论被过滤", async () => {
   const html = await renderComment(
     "<script>alert(1)</script>\n\n<img src=x onerror=alert(1)> [x](javascript:alert(1)) ||剧透|| ::banner",

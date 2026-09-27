@@ -155,13 +155,15 @@ const remarkContainers: Plugin<[RenderOptions?], Mdast> =
     )
   }
 
-// mermaid 代码块不走 Shiki，前台按需加载 mermaid 再画
+// mermaid、excalidraw 代码块不走 Shiki，原文留在 <pre> 里，前台按需加载对应的库再画
+// （excalidraw 块里是从 Excalidraw 复制出来的 JSON：{"type":"excalidraw/clipboard","elements":[…]}）
+const drawn = new Set(["mermaid", "excalidraw"])
 const remarkMermaid: Plugin<[], Mdast> = () => (tree) => {
   visit(tree, "code", (node) => {
-    if (node.lang !== "mermaid") return
+    if (!node.lang || !drawn.has(node.lang)) return
     node.data = {
       hName: "pre",
-      hProperties: { className: ["mermaid"] },
+      hProperties: { className: [node.lang] },
       hChildren: [{ type: "text", value: node.value }],
     }
   })
