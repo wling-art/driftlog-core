@@ -42,4 +42,4 @@ It downloads old images from `mixspace.crashvibe.cn/api/v3/objects/…` into our
 
 - Shared validation lives in `packages/schema` and is used by the server, OpenAPI, and both web apps' forms.
 - Optional integrations (AI, Resend, Sentry, S3, OAuth) turn off silently when their env vars are missing. Keep that behavior.
-- First email sign-up becomes the owner; later email sign-ups are rejected. Readers sign in with GitHub/Google.
+- First sign-up becomes the owner (the only one); everyone after is a reader. Readers can register with email (or GitHub/Google) on the blog to comment; the admin only lets the owner in (`/admin/*` is owner-only).

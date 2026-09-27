@@ -1,5 +1,4 @@
 import { betterAuth } from "better-auth"
-import { APIError, createAuthMiddleware } from "better-auth/api"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { passkey } from "@better-auth/passkey"
 import { count, eq } from "drizzle-orm"
@@ -41,18 +40,14 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        // 第一个注册的人是站长；之后注册的都是读者（GitHub / Google 登录来评论）
+        // 第一个注册的人是站长；之后注册的都是读者（前台登录来评论），后台只认站长
         before: async (u) => ({ data: { ...u, role: (await ownerExists()) ? "reader" : "owner" } }),
       },
     },
   },
-  hooks: {
-    // 邮箱注册只给第一次建站用
-    before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path === "/sign-up/email" && (await ownerExists()))
-        throw new APIError("FORBIDDEN", { message: "站长已经有了，读者请用 GitHub 或 Google 登录" })
-    }),
-  },
+  // 读者可以用邮箱注册（前台登录后评论不用再填名字邮箱）；站长只有一个：第一个注册的人，见上面的 databaseHooks。
+  // 注册、登录都限流（Better Auth 默认只在生产环境开，这里开发也开）
+  rateLimit: { enabled: true },
   advanced: isProd ? { defaultCookieAttributes: { sameSite: "none", secure: true } } : {},
 })
 
