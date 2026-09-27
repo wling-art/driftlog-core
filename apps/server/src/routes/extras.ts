@@ -112,8 +112,9 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
     },
     { params: idParam, body: z.object({ kind: reaction }) },
   )
-  .get("/links", () =>
-    cached("links", 600, () =>
+  // 友链不分先后：缓存里是固定顺序，每次响应再洗一遍（Fisher–Yates）
+  .get("/links", async () => {
+    const rows = await cached("links", 600, () =>
       db
         .select({
           id: links.id,
@@ -125,9 +126,14 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
         })
         .from(links)
         .where(eq(links.state, "approved"))
-        .orderBy(sql`random()`), // 友链不分先后：每次随机
-    ),
-  )
+        .orderBy(asc(links.id)),
+    )
+    for (let i = rows.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[rows[i], rows[j]] = [rows[j]!, rows[i]!]
+    }
+    return rows
+  })
   // 申请友链：进后台待审核
   .post(
     "/links/apply",
