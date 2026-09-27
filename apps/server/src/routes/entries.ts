@@ -1,20 +1,25 @@
 import { Elysia } from "elysia"
 import { z } from "zod"
 import { and, arrayContains, count, desc, eq, getTableColumns, gt, lt, sql } from "drizzle-orm"
-import { categories, entries, translations } from "@driftlog/db"
+import { categories, entries, slugRedirects, topics, translations } from "@driftlog/db"
 import { entryInput, entryPatch, entryType, listQuery } from "@driftlog/schema"
 import { renderMarkdown } from "@driftlog/markdown"
 import { db } from "../lib/db"
-import { cached, invalidate } from "../lib/redis"
+import { cached, invalidate, redis } from "../lib/redis"
 import { fetchLinkMeta } from "../lib/linkcard"
 import { extractFileHashes, syncRefs } from "../lib/files"
 import { broadcast } from "../lib/realtime"
 import { enqueue } from "../jobs/queue"
 import { authPlugin } from "../auth"
+import { clientIp } from "./comments"
 
-const { body: _body, ...listColumns } = getTableColumns(entries)
+const { body: _body, legacyId: _legacyId, ...listColumns } = getTableColumns(entries)
 const { html: _html, toc: _toc, ...cardColumns } = listColumns
-const card = { ...cardColumns, category: { name: categories.name, slug: categories.slug } }
+const card = {
+  ...cardColumns,
+  category: { name: categories.name, slug: categories.slug },
+  topic: { name: topics.name, slug: topics.slug },
+}
 
 const idParam = z.object({ id: z.coerce.number().int() })
 
@@ -28,11 +33,13 @@ async function list({ page = 1, size = 10, ...q }: z.infer<typeof listQuery>, on
     q.type ? eq(entries.type, q.type) : undefined,
     q.tag ? arrayContains(entries.tags, [q.tag]) : undefined,
     q.category ? eq(categories.slug, q.category) : undefined,
+    q.topic ? eq(topics.slug, q.topic) : undefined,
   )
   const base = db
     .select(card)
     .from(entries)
     .leftJoin(categories, eq(entries.categoryId, categories.id))
+    .leftJoin(topics, eq(entries.topicId, topics.id))
     .where(where)
   const [items, [total]] = await Promise.all([
     base
@@ -43,6 +50,7 @@ async function list({ page = 1, size = 10, ...q }: z.infer<typeof listQuery>, on
       .select({ n: count() })
       .from(entries)
       .leftJoin(categories, eq(entries.categoryId, categories.id))
+      .leftJoin(topics, eq(entries.topicId, topics.id))
       .where(where),
   ])
   return { items, total: total?.n ?? 0, page, size }
@@ -59,9 +67,14 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
     async ({ params, query, status }) => {
       const e = await cached(`entry:${query.type}:${params.slug}:${query.lang ?? ""}`, 300, async () => {
         const [row] = await db
-          .select({ ...listColumns, category: { name: categories.name, slug: categories.slug } })
+          .select({
+            ...listColumns,
+            category: { name: categories.name, slug: categories.slug },
+            topic: { name: topics.name, slug: topics.slug, introduce: topics.introduce },
+          })
           .from(entries)
           .leftJoin(categories, eq(entries.categoryId, categories.id))
+          .leftJoin(topics, eq(entries.topicId, topics.id))
           .where(
             and(eq(entries.type, query.type), eq(entries.slug, params.slug), eq(entries.published, true)),
           )
@@ -141,17 +154,63 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
           .select({ slug: entries.slug, title: entries.title, publishedAt: entries.publishedAt })
           .from(entries)
           .leftJoin(categories, eq(entries.categoryId, categories.id))
+          .leftJoin(topics, eq(entries.topicId, topics.id))
           .where(
             and(
               eq(entries.published, true),
               eq(entries.type, query.type),
               query.category ? eq(categories.slug, query.category) : undefined,
+              query.topic ? eq(topics.slug, query.topic) : undefined,
               query.tag ? arrayContains(entries.tags, [query.tag]) : undefined,
             ),
           )
           .orderBy(desc(entries.publishedAt), desc(entries.id)),
       ),
-    { query: z.object({ type: entryType, category: z.string().optional(), tag: z.string().optional() }) },
+    {
+      query: z.object({
+        type: entryType,
+        category: z.string().optional(),
+        tag: z.string().optional(),
+        topic: z.string().optional(),
+      }),
+    },
+  )
+  // 旧地址：改过 slug 的，查到现在的 slug（前台拿到就 301 过去）
+  .get(
+    "/resolve",
+    async ({ query, status }) => {
+      const [r] = await db
+        .select({ slug: entries.slug })
+        .from(slugRedirects)
+        .innerJoin(entries, eq(entries.id, slugRedirects.entryId))
+        .where(
+          and(
+            eq(slugRedirects.type, query.type),
+            eq(slugRedirects.oldSlug, query.slug),
+            eq(entries.published, true),
+          ),
+        )
+      return r ?? status(404, "这页走丢了")
+    },
+    { query: z.object({ type: entryType, slug: z.string() }) },
+  )
+  // 喜欢：同一个 IP 一年内只算一次
+  .post(
+    "/:id/like",
+    async ({ params, request, server }) => {
+      const ip = clientIp(request, server?.requestIP(request)?.address)
+      const fresh = await redis.set(`like:${params.id}:${ip}`, "1", "EX", String(365 * 86400), "NX")
+      const [e] = fresh
+        ? await db
+            .update(entries)
+            .set({ likes: sql`${entries.likes} + 1` })
+            .where(and(eq(entries.id, params.id), eq(entries.published, true)))
+            .returning({ likes: entries.likes })
+        : await db.select({ likes: entries.likes }).from(entries).where(eq(entries.id, params.id))
+      if (fresh) await invalidate()
+      return { likes: e?.likes ?? 0, counted: Boolean(fresh) }
+    },
+    { params: z.object({ id: z.coerce.number().int() }) },
   )
   .get("/tags", () =>
     cached("tags", 600, async () => {

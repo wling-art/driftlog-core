@@ -41,7 +41,14 @@ export const commentRoutes = new Elysia({ tags: ["comments"] })
           await db
             .select()
             .from(comments)
-            .where(and(eq(comments.entryId, query.entryId), eq(comments.status, "approved")))
+            // 悄悄话只有站长在后台看得到
+            .where(
+              and(
+                eq(comments.entryId, query.entryId),
+                eq(comments.status, "approved"),
+                eq(comments.private, false),
+              ),
+            )
             .orderBy(asc(comments.createdAt))
         ).map(publicComment),
       ),

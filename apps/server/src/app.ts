@@ -13,6 +13,7 @@ import { categoryRoutes } from "./routes/categories"
 import { clientIp, commentRoutes } from "./routes/comments"
 import { fileRoutes } from "./routes/files"
 import { adminRoutes } from "./routes/admin"
+import { extrasRoutes } from "./routes/extras"
 
 export const app = new Elysia()
   .use(cors({ origin: [env.BLOG_URL, env.ADMIN_URL], credentials: true }))
@@ -36,6 +37,7 @@ export const app = new Elysia()
   .use(commentRoutes)
   .use(fileRoutes)
   .use(adminRoutes)
+  .use(extrasRoutes)
   .get(
     "/search",
     async ({ query, request, server, status }) => {

@@ -224,6 +224,33 @@ const autolink: AutolinkOptions = {
   content: { type: "text", value: "#" },
 }
 
+/**
+ * mx-space 的容器写法：`::: info`（冒号后有空格）、`::: warning 标题`。
+ * remark-directive 只认 `:::name`，这里在解析前改写一下，原文不动：
+ *   info / warning / error / success / note / tip → banner；gallery、grid、details 原样去掉空格
+ */
+const MX_BANNER: Record<string, string> = {
+  info: "info",
+  note: "info",
+  tip: "info",
+  warning: "warning",
+  warn: "warning",
+  error: "error",
+  danger: "error",
+  success: "success",
+}
+export function mxCompat(markdown: string) {
+  return markdown.replace(
+    /^([ \t]*)(:{3,})[ \t]+([a-zA-Z][\w-]*)[ \t]*(.*)$/gm,
+    (_all, indent: string, colons: string, name: string, rest: string) => {
+      const lower = name.toLowerCase()
+      const label = rest.trim() ? `[${rest.trim().replace(/[[\]]/g, "")}]` : ""
+      if (MX_BANNER[lower]) return `${indent}${colons}banner${label}{type=${MX_BANNER[lower]}}`
+      return `${indent}${colons}${lower}${label}`
+    },
+  )
+}
+
 /** 文章 / 手记 / 页面：作者可信，完整语法 */
 export async function renderMarkdown(markdown: string, opts: RenderOptions = {}): Promise<Rendered> {
   let excerpt = ""
@@ -250,7 +277,7 @@ export async function renderMarkdown(markdown: string, opts: RenderOptions = {})
     })
     .use(lazyImages)
     .use(rehypeStringify)
-    .process(markdown)
+    .process(mxCompat(markdown))
   return { html: String(file), toc, excerpt }
 }
 

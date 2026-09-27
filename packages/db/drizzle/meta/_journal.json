@@ -8,6 +8,13 @@
       "when": 1790463311124,
       "tag": "0000_lumpy_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790514744474,
+      "tag": "0001_smiling_eternity",
+      "breakpoints": true
     }
   ]
 }

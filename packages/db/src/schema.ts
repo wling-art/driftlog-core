@@ -99,6 +99,19 @@ export const categories = pgTable("categories", {
   slug: text("slug").notNull().unique(),
   description: text("description").notNull().default(""),
   sort: integer("sort").notNull().default(0),
+  legacyId: text("legacy_id").unique(),
+  createdAt: createdAt(),
+})
+
+// 手记专栏：手记按专栏归类（像文章按分类）
+export const topics = pgTable("topics", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description").notNull().default(""),
+  introduce: text("introduce").notNull().default(""), // 一句话介绍
+  sort: integer("sort").notNull().default(0),
+  legacyId: text("legacy_id").unique(), // 从 mx-space 导入时的原 id，重复导入按它更新
   createdAt: createdAt(),
 })
 
@@ -115,6 +128,7 @@ export const entries = pgTable(
     toc: jsonb("toc").$type<TocItem[]>().notNull().default([]),
     excerpt: text("excerpt").notNull().default(""),
     summary: text("summary"), // AI 摘要
+    subtitle: text("subtitle"), // 页面的副标题
     categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
     tags: text("tags")
       .array()
@@ -125,7 +139,11 @@ export const entries = pgTable(
     pinned: boolean("pinned").notNull().default(false),
     mood: text("mood"),
     weather: text("weather"),
+    topicId: integer("topic_id").references(() => topics.id, { onDelete: "set null" }),
+    copyright: boolean("copyright").notNull().default(true), // 文末显示版权声明
     views: integer("views").notNull().default(0),
+    likes: integer("likes").notNull().default(0),
+    legacyId: text("legacy_id").unique(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -165,6 +183,9 @@ export const comments = pgTable(
     body: text("body").notNull(),
     html: text("html").notNull(),
     status: commentStatus("status").notNull().default("pending"),
+    private: boolean("private").notNull().default(false), // 悄悄话：只有站长看得到
+    location: text("location"),
+    legacyId: text("legacy_id").unique(),
     ip: text("ip"),
     userAgent: text("user_agent"),
     createdAt: createdAt(),
@@ -202,3 +223,85 @@ export const fileRefs = pgTable(
   },
   (t) => [primaryKey({ columns: [t.fileId, t.entryId] })],
 )
+
+// ---------- mx-space 带过来的功能 ----------
+
+// 旧地址跳转：改过 slug 的文章，旧 slug 还能打开（301 到新地址）
+export const slugRedirects = pgTable(
+  "slug_redirects",
+  {
+    type: entryType("type").notNull(),
+    oldSlug: text("old_slug").notNull(),
+    entryId: integer("entry_id")
+      .notNull()
+      .references(() => entries.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.type, t.oldSlug] })],
+)
+
+// 一言：一句话 + 出处
+export const says = pgTable("says", {
+  id: serial("id").primaryKey(),
+  text: text("text").notNull(),
+  source: text("source"),
+  author: text("author"),
+  legacyId: text("legacy_id").unique(),
+  createdAt: createdAt(),
+})
+
+// 动态：比手记更短的碎片（Shiro 的 /thinking），可以顶 / 踩
+export const thoughts = pgTable("thoughts", {
+  id: serial("id").primaryKey(),
+  content: text("content").notNull(),
+  html: text("html").notNull().default(""),
+  up: integer("up").notNull().default(0),
+  down: integer("down").notNull().default(0),
+  legacyId: text("legacy_id").unique(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
+export const linkType = pgEnum("link_type", ["friend", "collection"])
+export const linkState = pgEnum("link_state", ["approved", "pending", "outdated", "rejected"])
+
+// 友链：读者可以申请（pending），站长审核
+export const links = pgTable("links", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull().unique(),
+  avatar: text("avatar"),
+  description: text("description").notNull().default(""),
+  type: linkType("type").notNull().default("friend"),
+  state: linkState("state").notNull().default("pending"),
+  email: text("email"),
+  legacyId: text("legacy_id").unique(),
+  createdAt: createdAt(),
+})
+
+export const projects = pgTable("projects", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  avatar: text("avatar"),
+  previewUrl: text("preview_url"),
+  projectUrl: text("project_url"),
+  docUrl: text("doc_url"),
+  body: text("body").notNull().default(""),
+  html: text("html").notNull().default(""),
+  sort: integer("sort").notNull().default(0),
+  legacyId: text("legacy_id").unique(),
+  createdAt: createdAt(),
+})
+
+// 站点设置：只有一行（id = 1）
+export type SiteSettings = {
+  title: string
+  description: string
+  keywords: string[]
+  owner: { name: string; introduce: string; avatar: string | null; socials: Record<string, string> }
+}
+export const siteSettings = pgTable("site_settings", {
+  id: integer("id").primaryKey().default(1),
+  value: jsonb("value").$type<SiteSettings>().notNull(),
+  updatedAt: updatedAt(),
+})

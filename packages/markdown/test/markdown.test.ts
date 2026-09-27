@@ -49,3 +49,14 @@ test("评论被过滤", async () => {
   expect(html).not.toContain("javascript:")
   expect(html).toContain('<span class="md-spoiler">剧透</span>')
 })
+
+test("mx-space 写法：带空格的剧透、::: info 容器", async () => {
+  const { html } = await renderMarkdown(
+    "Java ||其实喜欢 kotlin 多一点（  ||，Go || ，orm 不好用 ||\n\n::: info\n小心被骗\n:::\n\n::: warning 注意\n别删库\n:::",
+  )
+  expect(html).toContain('<span class="md-spoiler">其实喜欢 kotlin 多一点（  </span>')
+  expect(html).toContain('<span class="md-spoiler"> ，orm 不好用 </span>')
+  expect(html).toContain('class="md-banner" data-type="info"')
+  expect(html).toContain('class="md-banner" data-type="warning"')
+  expect(html).toContain("别删库")
+})

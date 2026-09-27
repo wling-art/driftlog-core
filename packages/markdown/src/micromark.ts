@@ -21,7 +21,11 @@ import type { Extension as FromMarkdownExtension } from "mdast-util-from-markdow
 
 type Wrap = "spoiler" | "mark" | "insert"
 
-function doubleMarker(name: Wrap, marker: number): Extension {
+/**
+ * loose：两边可以有空格（`|| 文字 ||`）。mx-space 的剧透就是这么写的，
+ * 所以剧透不管左右是什么字符，任何一对 || 都能开、能关。
+ */
+function doubleMarker(name: Wrap, marker: number, loose = false): Extension {
   const seqTemp = `${name}SequenceTemporary` as never
   const seq = `${name}Sequence` as never
   const tokenizer = { name, tokenize, resolveAll: resolve }
@@ -87,8 +91,8 @@ function doubleMarker(name: Wrap, marker: number): Extension {
       const token = effects.exit(seqTemp)
       const before = classifyCharacter(previous)
       const after = classifyCharacter(code)
-      token._open = !after || (after === 2 && Boolean(before))
-      token._close = !before || (before === 2 && Boolean(after))
+      token._open = loose || !after || (after === 2 && Boolean(before))
+      token._close = loose || !before || (before === 2 && Boolean(after))
       return ok(code)
     }
     return (code) => {
@@ -155,7 +159,7 @@ const mention: Extension = {
 }
 
 export const micromarkExtensions: Extension[] = [
-  doubleMarker("spoiler", 124),
+  doubleMarker("spoiler", 124, true),
   doubleMarker("mark", 61),
   doubleMarker("insert", 43),
   mention,
