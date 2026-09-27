@@ -26,7 +26,14 @@ cd apps/server
 MX_DATABASE_URL=postgres://…/mx_core DATABASE_URL=postgres://…/driftlog DATA_DIR=… bun src/cli/import-mx.ts
 ```
 
-It downloads old images from `mixspace.crashvibe.cn/api/v3/objects/…` into our storage and rewrites URLs. Notes get `slug = nid` so old `/notes/12` links keep working; renamed slugs go into `slug_redirects` (served by `GET /entries/resolve`). The renderer's `mxCompat()` handles mx-space syntax (`::: info`, spaced `|| spoilers ||`) without changing stored bodies.
+After changing the markdown pipeline, re-render stored entries (keeps `updated_at`; translations only store HTML, so they can't be re-rendered):
+
+```bash
+cd apps/server && bun src/cli/rerender.ts   # dry run: which entries would change
+bun src/cli/rerender.ts --write
+```
+
+The import downloads old images from `mixspace.crashvibe.cn/api/v3/objects/…` into our storage and rewrites URLs. Notes get `slug = nid` so old `/notes/12` links keep working; renamed slugs go into `slug_redirects` (served by `GET /entries/resolve`). The renderer's `mxCompat()` handles mx-space syntax (`::: info`, spaced `|| spoilers ||`) without changing stored bodies.
 
 ## Traps (all hit for real)
 

@@ -41,6 +41,24 @@ test("代码高亮、公式、mermaid、目录", async () => {
   expect(r.toc).toEqual([{ depth: 2, id: "第一节", text: "第一节" }])
 })
 
+test("单独一行的视频链接变播放器，光秃秃的网址变卡片，句子里的链接不动", async () => {
+  const r = await renderMarkdown(
+    [
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://www.bilibili.com/video/BV1xx411c7mD",
+      "https://example.com/a",
+      "[官网](https://example.com/b)",
+      "看这里 https://example.com/c 就行",
+    ].join("\n\n"),
+    { resolveLinkCard: async (url) => ({ url, title: "示例" }) },
+  )
+  expect(r.html).toContain("youtube-nocookie.com/embed/dQw4w9WgXcQ")
+  expect(r.html).toContain("player.bilibili.com/player.html?bvid=BV1xx411c7mD")
+  expect(r.html).toContain('class="md-link-card" href="https://example.com/a"')
+  expect(r.html).not.toContain('class="md-link-card" href="https://example.com/b"')
+  expect(r.html).not.toContain('class="md-link-card" href="https://example.com/c"')
+})
+
 test("excalidraw 块原样留给前台画", async () => {
   const r = await renderMarkdown('```excalidraw\n{"type":"excalidraw/clipboard","elements":[]}\n```')
   expect(r.html).toContain('<pre class="excalidraw">{"type":"excalidraw/clipboard"')

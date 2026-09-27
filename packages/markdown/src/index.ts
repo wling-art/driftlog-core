@@ -41,6 +41,16 @@ const components: Record<string, (attrs: Record<string, string>) => Element | nu
     a.src?.startsWith("https://") || a.src?.startsWith("/")
       ? h("video", { src: a.src, controls: true, preload: "metadata" })
       : null,
+  youtube: (a) =>
+    /^[\w-]{11}$/.test(a.id ?? "")
+      ? h("iframe.md-embed", {
+          // nocookie 域名：不点播放不给 YouTube 发 cookie
+          src: `https://www.youtube-nocookie.com/embed/${a.id}`,
+          allowFullScreen: true,
+          loading: "lazy",
+          title: "YouTube 视频",
+        })
+      : null,
   bilibili: (a) =>
     /^BV\w{10}$/.test(a.bv ?? "")
       ? h("iframe.md-embed", {
@@ -49,6 +59,37 @@ const components: Record<string, (attrs: Record<string, string>) => Element | nu
           loading: "lazy",
         })
       : null,
+}
+
+/**
+ * 单独一行的链接自动变样（参考 Shiro）：
+ * - 视频（YouTube、B 站、.mp4 / .webm / .mov）→ 播放器
+ * - 光秃秃的网址（链接文字就是网址本身）→ 链接卡片
+ * 做法是把这一段换成对应的叶子指令，后面 remarkContainers 照常处理。
+ * 写成 [文字](网址) 的普通链接不动：那是作者想要的一段文字
+ */
+export function embedOf(url: string): { name: string; attributes: Record<string, string> } | null {
+  const yt = url.match(
+    /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/)|youtu\.be\/)([\w-]{11})/,
+  )
+  if (yt) return { name: "youtube", attributes: { id: yt[1]! } }
+  const bv = url.match(/^https?:\/\/(?:www\.|m\.)?bilibili\.com\/video\/(BV\w{10})/)
+  if (bv) return { name: "bilibili", attributes: { bv: bv[1]! } }
+  if (/^https:\/\/[^?#]+\.(?:mp4|webm|mov)(?:[?#]|$)/i.test(url))
+    return { name: "video", attributes: { src: url } }
+  return null
+}
+const remarkAutoEmbed: Plugin<[], Mdast> = () => (tree) => {
+  visit(tree, "paragraph", (node, index, parent) => {
+    if (!parent || index === undefined) return
+    const kids = node.children.filter((c) => !(c.type === "text" && !c.value.trim()))
+    const link = kids.length === 1 && kids[0]!.type === "link" ? kids[0] : null
+    if (!link || !/^https?:\/\//.test(link.url)) return
+    const bare = mdToString(link).trim() === link.url
+    const embed = embedOf(link.url) ?? (bare ? { name: "link-card", attributes: { url: link.url } } : null)
+    if (!embed) return
+    ;(parent as Parent).children.splice(index, 1, { type: "leafDirective", ...embed, children: [] } as never)
+  })
 }
 
 type Directive = Extract<RootContent, { type: "containerDirective" | "leafDirective" | "textDirective" }>
@@ -264,6 +305,7 @@ export async function renderMarkdown(markdown: string, opts: RenderOptions = {})
     .use(remarkDirective)
     .use(remarkMath)
     .use(remarkMermaid)
+    .use(remarkAutoEmbed)
     .use(remarkContainers, opts)
     .use(() => (tree: Mdast) => void (excerpt = excerptOf(tree)))
     .use(remarkRehype, { handlers: inlineHandlers })
