@@ -125,7 +125,7 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
         })
         .from(links)
         .where(eq(links.state, "approved"))
-        .orderBy(asc(links.createdAt)),
+        .orderBy(sql`random()`), // 友链不分先后：每次随机
     ),
   )
   // 申请友链：进后台待审核
