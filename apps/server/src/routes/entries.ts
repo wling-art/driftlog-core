@@ -131,18 +131,27 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
         .orderBy(desc(entries.publishedAt)),
     ),
   )
-  // 某一类的全部已发布条目，只要标题和 slug：前台翻页「磁带」用，按时间从早到晚
+  // 归档：某一类的全部已发布条目，只要标题、slug、日期，按时间从新到旧；可按分类 / 标签筛
+  // ponytail: 一次全给，几千篇以内够用；再多了改成按年份分段取
   .get(
     "/index",
     ({ query }) =>
-      cached(`index:${query.type}`, 600, () =>
+      cached(`index:${JSON.stringify(query)}`, 600, () =>
         db
           .select({ slug: entries.slug, title: entries.title, publishedAt: entries.publishedAt })
           .from(entries)
-          .where(and(eq(entries.published, true), eq(entries.type, query.type)))
-          .orderBy(entries.publishedAt, entries.id),
+          .leftJoin(categories, eq(entries.categoryId, categories.id))
+          .where(
+            and(
+              eq(entries.published, true),
+              eq(entries.type, query.type),
+              query.category ? eq(categories.slug, query.category) : undefined,
+              query.tag ? arrayContains(entries.tags, [query.tag]) : undefined,
+            ),
+          )
+          .orderBy(desc(entries.publishedAt), desc(entries.id)),
       ),
-    { query: z.object({ type: entryType }) },
+    { query: z.object({ type: entryType, category: z.string().optional(), tag: z.string().optional() }) },
   )
   .get("/tags", () =>
     cached("tags", 600, async () => {
