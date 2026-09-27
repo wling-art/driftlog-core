@@ -131,6 +131,19 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
         .orderBy(desc(entries.publishedAt)),
     ),
   )
+  // 某一类的全部已发布条目，只要标题和 slug：前台翻页「磁带」用，按时间从早到晚
+  .get(
+    "/index",
+    ({ query }) =>
+      cached(`index:${query.type}`, 600, () =>
+        db
+          .select({ slug: entries.slug, title: entries.title, publishedAt: entries.publishedAt })
+          .from(entries)
+          .where(and(eq(entries.published, true), eq(entries.type, query.type)))
+          .orderBy(entries.publishedAt, entries.id),
+      ),
+    { query: z.object({ type: entryType }) },
+  )
   .get("/tags", () =>
     cached("tags", 600, async () => {
       const rows = await db.execute<{ tag: string; n: number }>(
