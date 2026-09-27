@@ -185,6 +185,7 @@ export const comments = pgTable(
     status: commentStatus("status").notNull().default("pending"),
     private: boolean("private").notNull().default(false), // 悄悄话：只有站长看得到
     location: text("location"),
+    avatar: text("avatar"), // 明确的头像（登录账号的头像、旧站导进来的 GitHub 头像）；没有就用 Gravatar
     legacyId: text("legacy_id").unique(),
     ip: text("ip"),
     userAgent: text("user_agent"),

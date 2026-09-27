@@ -96,7 +96,7 @@ const settings: SiteSettings = {
 await db
   .insert(siteSettings)
   .values({ id: 1, value: settings })
-  .onConflictDoUpdate({ target: siteSettings.id, set: { value: settings } })
+  .onConflictDoNothing() // 站点设置导过一次就归后台管：重复跑不覆盖后台改过的
 console.log(`站点设置：${settings.title}`)
 
 // ---------- 分类、专栏 ----------
@@ -229,6 +229,11 @@ const readers = new Map<string, Row>(
   (await src`select id, name, email from readers`).map((r: Row) => [r.id, r]),
 )
 const commentId = new Map<string, number>()
+// 旧站的回复关系丢了（parent_comment_id 全是空的，mx-space 从 MongoDB 迁到 PostgreSQL 时没带过来）。
+// 只能按规律补：站长在一篇下面的评论，如果前面已经有别人评论过，就当是回复最近的那一条。
+// ponytail: 启发式，只补站长的；读者之间的回复猜不出来，保持顶层
+const lastGuest = new Map<number, number>() // 条目 → 最近一条别人的评论（新 id）
+const seen = new Set<number>() // 已经有评论的条目
 let skipped = 0
 for (const c of await src`select * from comments where not coalesce(is_deleted, false) order by created_at`) {
   const target = entryId.get(c.ref_id)
@@ -237,10 +242,13 @@ for (const c of await src`select * from comments where not coalesce(is_deleted, 
     continue
   }
   const reader = c.reader_id ? readers.get(c.reader_id) : undefined
+  const author = c.author || reader?.name || "匿名"
+  const isOwner = author === settings.owner.name
+  const guessed = isOwner && seen.has(target) ? (lastGuest.get(target) ?? null) : null
   const values = {
     entryId: target,
-    parentId: c.parent_comment_id ? (commentId.get(c.parent_comment_id) ?? null) : null,
-    author: c.author || reader?.name || "匿名",
+    parentId: c.parent_comment_id ? (commentId.get(c.parent_comment_id) ?? null) : guessed,
+    author,
     email: c.mail || reader?.email || "unknown@invalid",
     url: c.url || null,
     body: c.text ?? "",
@@ -249,6 +257,7 @@ for (const c of await src`select * from comments where not coalesce(is_deleted, 
     status: c.state === 2 ? ("spam" as const) : ("approved" as const),
     private: Boolean(c.is_whispers),
     location: c.location || null,
+    avatar: c.avatar || null,
     ip: c.ip || null,
     userAgent: c.agent || null,
     createdAt: c.created_at,
@@ -260,6 +269,8 @@ for (const c of await src`select * from comments where not coalesce(is_deleted, 
     .onConflictDoUpdate({ target: comments.legacyId, set: values })
     .returning({ id: comments.id })
   commentId.set(c.id, row!.id)
+  seen.add(target)
+  if (!isOwner) lastGuest.set(target, row!.id)
 }
 log("评论", commentId.size)
 if (skipped) log("跳过的评论（挂在未导入的内容上）", skipped)

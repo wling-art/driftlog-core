@@ -9,8 +9,9 @@ import { cached, invalidate, rateLimit } from "../lib/redis"
 import { enqueue } from "../jobs/queue"
 import { authPlugin } from "../auth"
 
-const avatar = (email: string) =>
-  `https://gravatar.com/avatar/${new Bun.CryptoHasher("sha256").update(email.trim().toLowerCase()).digest("hex")}?d=identicon&s=80`
+// Gravatar（SHA-256，不把邮箱本身发出去）；没设头像的返回 404，前台退回首字母头像
+const gravatar = (email: string) =>
+  `https://gravatar.com/avatar/${new Bun.CryptoHasher("sha256").update(email.trim().toLowerCase()).digest("hex")}?d=404&s=80`
 
 // 公开字段：不带邮箱和 IP
 const publicComment = (c: typeof comments.$inferSelect) => ({
@@ -19,7 +20,7 @@ const publicComment = (c: typeof comments.$inferSelect) => ({
   author: c.author,
   url: c.url,
   html: c.html,
-  avatar: avatar(c.email),
+  avatar: c.avatar ?? gravatar(c.email),
   createdAt: c.createdAt,
 })
 
@@ -79,6 +80,7 @@ export const commentRoutes = new Elysia({ tags: ["comments"] })
           author: user?.name ?? body.author,
           email: user?.email ?? body.email,
           userId: user?.id ?? null,
+          avatar: user?.image ?? null,
           html: await renderComment(body.body),
           status: isOwner ? "approved" : "pending",
           ip,
@@ -111,7 +113,11 @@ export const commentRoutes = new Elysia({ tags: ["comments"] })
             db.select({ n: count() }).from(comments).where(where),
           ])
           return {
-            items: items.map((r) => ({ ...r.comment, avatar: avatar(r.comment.email), entry: r.entry })),
+            items: items.map((r) => ({
+              ...r.comment,
+              avatar: r.comment.avatar ?? gravatar(r.comment.email),
+              entry: r.entry,
+            })),
             total: total?.n ?? 0,
           }
         },
