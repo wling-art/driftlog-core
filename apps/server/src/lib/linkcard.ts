@@ -1,7 +1,7 @@
 import type { LinkMeta } from "@driftlog/markdown"
 import { redis } from "./redis"
 
-/** 链接卡片：只读 <head> 里的 og / title，用 HTMLRewriter 流式解析，缓存一天 */
+/** 抓网页的 og 信息和标题，缓存一天 */
 export async function fetchLinkMeta(url: string): Promise<LinkMeta | null> {
   const key = `linkcard:${url}`
   const hit = await redis.get(key)

@@ -12,11 +12,11 @@ import { env } from "../env"
 const idParam = z.object({ id: z.coerce.number().int() })
 
 export const fileRoutes = new Elysia({ tags: ["files"] })
-  // 本地存储时由这里出文件；前面挂 Cloudflare CDN，文件名就是内容哈希，可以永久缓存
-  .get("/files/*", ({ params, status }) => {
+  // 本地存储的文件，按内容哈希命名，永久缓存
+  .get("/files/*", async ({ params, status }) => {
     if (env.STORAGE !== "local") return status(404)
     const f = storage.get(params["*"])
-    if (!f) return status(404)
+    if (!f || !(await f.exists())) return status(404)
     return new Response(f, {
       headers: {
         "cache-control": "public, max-age=31536000, immutable",

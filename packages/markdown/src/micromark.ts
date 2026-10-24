@@ -2,29 +2,17 @@ import { splice } from "micromark-util-chunked"
 import { classifyCharacter } from "micromark-util-classify-character"
 import { resolveAll } from "micromark-util-resolve-all"
 import { asciiAlpha, asciiAlphanumeric } from "micromark-util-character"
-import type {
-  Event,
-  Extension,
-  Resolver,
-  State,
-  Token,
-  TokenizeContext,
-  Tokenizer,
-} from "micromark-util-types"
+import type { Event, Extension, State, Token, TokenizeContext, Tokenizer } from "micromark-util-types"
 import type { Extension as FromMarkdownExtension } from "mdast-util-from-markdown"
 
 /*
- * 自定义行内语法（micromark 扩展）：
- *   ||剧透||   ==标记==   ++插入++   {GH@user} 提及
- * 前三种照 micromark-extension-gfm-strikethrough 改写：成对的双字符，里面照常解析行内语法。
+ * 自定义行内语法：||剧透||  ==标记==  ++插入++  {GH@user} 提及
+ * 前三种按 micromark-extension-gfm-strikethrough 改写。
  */
 
 type Wrap = "spoiler" | "mark" | "insert"
 
-/**
- * loose：两边可以有空格（`|| 文字 ||`）。mx-space 的剧透就是这么写的，
- * 所以剧透不管左右是什么字符，任何一对 || 都能开、能关。
- */
+/** 成对的双字符标记；loose 时不看两边字符，任何一对都能开、关（`|| 文字 ||`） */
 function doubleMarker(name: Wrap, marker: number, loose = false): Extension {
   const seqTemp = `${name}SequenceTemporary` as never
   const seq = `${name}Sequence` as never
@@ -103,7 +91,7 @@ function doubleMarker(name: Wrap, marker: number, loose = false): Extension {
   }
 }
 
-// {GH@innei} → 链接到对应平台的主页
+// {GH@user} 的平台 → 主页前缀
 export const mentionPlatforms: Record<string, string> = {
   GH: "https://github.com/",
   TW: "https://x.com/",
@@ -165,7 +153,7 @@ export const micromarkExtensions: Extension[] = [
   mention,
 ]
 
-// mdast：把上面的 token 变成节点
+// token → mdast 节点
 function wrapFromMarkdown(name: Wrap): FromMarkdownExtension {
   return {
     canContainEols: [name],
@@ -257,4 +245,3 @@ declare module "micromark-util-types" {
     mentionUser: "mentionUser"
   }
 }
-export type { Resolver }

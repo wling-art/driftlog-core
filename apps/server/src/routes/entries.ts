@@ -6,6 +6,7 @@ import { entryInput, entryPatch, entryType, listQuery } from "@driftlog/schema"
 import { renderMarkdown } from "@driftlog/markdown"
 import { db } from "../lib/db"
 import { cached, invalidate, redis } from "../lib/redis"
+import { log } from "../lib/log"
 import { fetchLinkMeta } from "../lib/linkcard"
 import { extractFileHashes, syncRefs } from "../lib/files"
 import { broadcast } from "../lib/realtime"
@@ -23,9 +24,7 @@ const card = {
 
 const idParam = z.object({ id: z.coerce.number().int() })
 
-async function render(body: string) {
-  return renderMarkdown(body, { resolveLinkCard: fetchLinkMeta })
-}
+const render = (body: string) => renderMarkdown(body, { resolveLinkCard: fetchLinkMeta })
 
 async function list({ page = 1, size = 10, ...q }: z.infer<typeof listQuery>, onlyPublished: boolean) {
   const where = and(
@@ -56,12 +55,12 @@ async function list({ page = 1, size = 10, ...q }: z.infer<typeof listQuery>, on
   return { items, total: total?.n ?? 0, page, size }
 }
 
-/** 公开接口：只看已发布的 */
+/** 公开接口，只返回已发布的 */
 export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] })
   .get("/", ({ query }) => cached(`list:${JSON.stringify(query)}`, 300, () => list(query, true)), {
     query: listQuery,
   })
-  // 类型放在 query 里：Eden 会把值为 "post" 的路径段当成 HTTP 方法
+  // 类型放在 query 里，见 CLAUDE.md
   .get(
     "/slug/:slug",
     async ({ params, query, status }) => {
@@ -111,12 +110,11 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
         }
       })
       if (!e) return status(404, "这页走丢了")
-      // 阅读数不走缓存
-      void db
-        .update(entries)
-        .set({ views: sql`${entries.views} + 1`, updatedAt: sql`${entries.updatedAt}` }) // 计数不算「更新」
+      // 阅读数 +1，不改 updatedAt
+      db.update(entries)
+        .set({ views: sql`${entries.views} + 1`, updatedAt: sql`${entries.updatedAt}` })
         .where(eq(entries.id, e.id))
-        .execute()
+        .catch((err) => log.warn({ err }, "阅读数没记上"))
       return e
     },
     {
@@ -124,7 +122,7 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
       query: z.object({ type: entryType.default("post"), lang: z.string().optional() }),
     },
   )
-  // sitemap / RSS 用：全部已发布的
+  // 全部已发布的（sitemap / RSS）
   .get("/feed", () =>
     cached("feed", 600, () =>
       db
@@ -144,8 +142,8 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
         .orderBy(desc(entries.publishedAt)),
     ),
   )
-  // 归档：某一类的全部已发布条目，只要标题、slug、日期，按时间从新到旧；可按分类 / 标签筛
-  // ponytail: 一次全给，几千篇以内够用；再多了改成按年份分段取
+  // 归档：某一类的全部已发布条目，从新到旧
+  // shortcut: 一次全给，几千篇以上改成分段取
   .get(
     "/index",
     ({ query }) =>
@@ -155,7 +153,6 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
             slug: entries.slug,
             title: entries.title,
             publishedAt: entries.publishedAt,
-            // 手记时间线上那行小字：专栏 · 心情 · 天气
             mood: entries.mood,
             weather: entries.weather,
             topic: topics.name,
@@ -183,7 +180,7 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
       }),
     },
   )
-  // 旧地址：改过 slug 的，查到现在的 slug（前台拿到就 301 过去）
+  // 旧 slug → 现在的 slug
   .get(
     "/resolve",
     async ({ query, status }) => {
@@ -202,11 +199,11 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
     },
     { query: z.object({ type: entryType, slug: z.string() }) },
   )
-  // 喜欢：同一个 IP 一年内只算一次
+  // 喜欢：同一 IP 一年算一次
   .post(
     "/:id/like",
     async ({ params, request, server }) => {
-      const ip = clientIp(request, server?.requestIP(request)?.address)
+      const ip = clientIp(request, server)
       const fresh = await redis.set(`like:${params.id}:${ip}`, "1", "EX", String(365 * 86400), "NX")
       const [e] = fresh
         ? await db
@@ -229,7 +226,6 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
     }),
   )
 
-/** 后台接口 */
 export const adminEntries = new Elysia({ prefix: "/admin/entries", tags: ["admin"] })
   .use(authPlugin)
   .guard({ owner: true })
@@ -293,7 +289,7 @@ export const adminEntries = new Elysia({ prefix: "/admin/entries", tags: ["admin
     },
     { params: idParam, body: z.object({ lang: z.string().min(2).max(10) }) },
   )
-  // 编辑器实时预览也可以走服务端（带链接卡片）；后台默认在浏览器里渲染
+  // 服务端渲染预览（带链接卡片）
   .post("/preview", ({ body }) => render(body.body), { body: z.object({ body: z.string() }) })
 
 async function afterSave(e: typeof entries.$inferSelect, bodyChanged: boolean, wasPublished: boolean) {

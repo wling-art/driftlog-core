@@ -1,13 +1,14 @@
 import { Elysia } from "elysia"
 import { z } from "zod"
-import { asc, count, eq } from "drizzle-orm"
+import { asc, count, eq, sql } from "drizzle-orm"
 import { categories, entries } from "@driftlog/db"
-import { categoryInput, reorderInput } from "@driftlog/schema"
+import { categoryInput, patchOf, reorderInput } from "@driftlog/schema"
 import { db } from "../lib/db"
 import { cached, invalidate } from "../lib/redis"
 import { authPlugin } from "../auth"
 
-const all = () =>
+// 公开的只数已发布的
+const all = (onlyPublished: boolean) =>
   db
     .select({
       id: categories.id,
@@ -15,7 +16,9 @@ const all = () =>
       slug: categories.slug,
       description: categories.description,
       sort: categories.sort,
-      count: count(entries.id),
+      count: onlyPublished
+        ? sql<number>`count(${entries.id}) filter (where ${entries.published})::int`
+        : count(entries.id),
     })
     .from(categories)
     .leftJoin(entries, eq(entries.categoryId, categories.id))
@@ -25,11 +28,11 @@ const all = () =>
 const idParam = z.object({ id: z.coerce.number().int() })
 
 export const categoryRoutes = new Elysia({ tags: ["categories"] })
-  .get("/categories", () => cached("categories", 600, all))
+  .get("/categories", () => cached("categories", 600, () => all(true)))
   .use(authPlugin)
   .group("/admin/categories", { owner: true }, (app) =>
     app
-      .get("/", all)
+      .get("/", () => all(false))
       .post(
         "/",
         async ({ body }) => {
@@ -46,7 +49,7 @@ export const categoryRoutes = new Elysia({ tags: ["categories"] })
           await invalidate()
           return c
         },
-        { params: idParam, body: categoryInput.partial() },
+        { params: idParam, body: patchOf(categoryInput) },
       )
       .delete(
         "/:id",
@@ -57,7 +60,7 @@ export const categoryRoutes = new Elysia({ tags: ["categories"] })
         },
         { params: idParam },
       )
-      // 拖拽排序：按传入顺序写 sort
+      // 按传入顺序写 sort
       .put(
         "/order",
         async ({ body }) => {

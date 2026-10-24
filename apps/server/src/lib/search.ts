@@ -19,7 +19,7 @@ export async function setupSearch() {
   })
 }
 
-/** 把一篇同步进搜索：没发布就删掉 */
+/** 同步一篇到搜索，未发布的删掉 */
 export async function syncSearch(id: number) {
   const [e] = await db.select().from(entries).where(eq(entries.id, id))
   if (!e?.published) return void (await index.deleteDocument(id))
@@ -47,7 +47,7 @@ export async function search(q: string, limit = 10) {
     attributesToCrop: ["text"],
     cropLength: 40,
     attributesToHighlight: ["title", "text"],
-    // 用控制字符占位，先转义再换成 <mark>：前台会把结果当 HTML 渲染
+    // 控制字符占位，highlight() 转义后换成 <mark>
     highlightPreTag: "\u0001",
     highlightPostTag: "\u0002",
   })

@@ -2,7 +2,7 @@ import { generateObject, generateText } from "ai"
 import { z } from "zod"
 import { env } from "../env"
 
-// AI SDK：模型走 AI Gateway（AI_MODEL 形如 anthropic/claude-haiku-4-5）。没配就全部跳过
+// AI_MODEL 形如 anthropic/claude-haiku-4-5，走 AI Gateway
 export const aiEnabled = Boolean(env.AI_MODEL)
 const model = () => env.AI_MODEL!
 

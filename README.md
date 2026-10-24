@@ -45,7 +45,7 @@ bun test
 docker compose up -d   # api + postgres 18 + valkey + meilisearch，/data 卷放文件和备份
 ```
 
-容器启动时自动跑迁移。前面挂 Cloudflare：`/files/*` 按内容哈希命名，响应头是 `immutable`，可以永久缓存。
+容器启动时自动跑迁移。生产环境必须在 `.env` 里设置 `BETTER_AUTH_SECRET`，否则不启动。前面挂 Cloudflare：`/files/*` 按内容哈希命名，响应头是 `immutable`，可以永久缓存。
 
 ## Markdown 扩展语法
 

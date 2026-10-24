@@ -21,12 +21,12 @@ import { fromMarkdownExtensions, mentionPlatforms, micromarkExtensions } from ".
 
 export type LinkMeta = { url: string; title?: string; description?: string; image?: string; site?: string }
 export type RenderOptions = {
-  /** 链接卡片的元信息：服务端用 HTMLRewriter 抓，浏览器预览里不传 */
+  /** 取链接卡片的元信息，不传就只显示网址 */
   resolveLinkCard?: (url: string) => Promise<LinkMeta | null>
 }
 export type Rendered = { html: string; toc: TocItem[]; excerpt: string }
 
-// 自定义语法接到 remark 上
+// 接入自定义行内语法
 const remarkCustom: Plugin<[], Mdast> = function () {
   const data = this.data()
   ;(data.micromarkExtensions ??= []).push(...micromarkExtensions)
@@ -35,7 +35,7 @@ const remarkCustom: Plugin<[], Mdast> = function () {
 
 const bannerTypes = new Set(["info", "warning", "error", "success"])
 
-// 白名单组件：只有这里列出的 ::name 能用，别的原样显示为提示
+// 白名单组件：::name，其他名字显示为「不支持」
 const components: Record<string, (attrs: Record<string, string>) => Element | null> = {
   video: (a) =>
     a.src?.startsWith("https://") || a.src?.startsWith("/")
@@ -44,7 +44,6 @@ const components: Record<string, (attrs: Record<string, string>) => Element | nu
   youtube: (a) =>
     /^[\w-]{11}$/.test(a.id ?? "")
       ? h("iframe.md-embed", {
-          // nocookie 域名：不点播放不给 YouTube 发 cookie
           src: `https://www.youtube-nocookie.com/embed/${a.id}`,
           allowFullScreen: true,
           loading: "lazy",
@@ -61,13 +60,7 @@ const components: Record<string, (attrs: Record<string, string>) => Element | nu
       : null,
 }
 
-/**
- * 单独一行的链接自动变样（参考 Shiro）：
- * - 视频（YouTube、B 站、.mp4 / .webm / .mov）→ 播放器
- * - 光秃秃的网址（链接文字就是网址本身）→ 链接卡片
- * 做法是把这一段换成对应的叶子指令，后面 remarkContainers 照常处理。
- * 写成 [文字](网址) 的普通链接不动：那是作者想要的一段文字
- */
+/** 视频网址 → 对应的叶子指令（YouTube、B 站、.mp4 / .webm / .mov） */
 export function embedOf(url: string): { name: string; attributes: Record<string, string> } | null {
   const yt = url.match(
     /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/)|youtu\.be\/)([\w-]{11})/,
@@ -79,6 +72,7 @@ export function embedOf(url: string): { name: string; attributes: Record<string,
     return { name: "video", attributes: { src: url } }
   return null
 }
+// 单独一行的链接：视频变播放器，文字就是网址的变链接卡片
 const remarkAutoEmbed: Plugin<[], Mdast> = () => (tree) => {
   visit(tree, "paragraph", (node, index, parent) => {
     if (!parent || index === undefined) return
@@ -94,7 +88,7 @@ const remarkAutoEmbed: Plugin<[], Mdast> = () => (tree) => {
 
 type Directive = Extract<RootContent, { type: "containerDirective" | "leafDirective" | "textDirective" }>
 
-// 容器 / 叶子指令 → hast。先把 label 抽出来，再改 data.hName
+// 指令 → HTML 元素
 const remarkContainers: Plugin<[RenderOptions?], Mdast> =
   (opts = {}) =>
   async (tree) => {
@@ -114,7 +108,7 @@ const remarkContainers: Plugin<[RenderOptions?], Mdast> =
       const label = hasLabel ? mdToString(labelNode) : ""
 
       if (d.type === "textDirective") {
-        // 「时间 12:30」「note:hi」这类误伤：还原成原文
+        // 行内指令（如 12:30、note:hi）还原成原文
         if (parent && index !== undefined) {
           const text: PhrasingContent = { type: "text", value: `:${d.name}${label ? `[${label}]` : ""}` }
           ;(parent as Parent).children.splice(index, 1, text)
@@ -196,8 +190,7 @@ const remarkContainers: Plugin<[RenderOptions?], Mdast> =
     )
   }
 
-// mermaid、excalidraw 代码块不走 Shiki，原文留在 <pre> 里，前台按需加载对应的库再画
-// （excalidraw 块里是从 Excalidraw 复制出来的 JSON：{"type":"excalidraw/clipboard","elements":[…]}）
+// mermaid、excalidraw 代码块原样放进 <pre class="语言">，不高亮
 const drawn = new Set(["mermaid", "excalidraw"])
 const remarkMermaid: Plugin<[], Mdast> = () => (tree) => {
   visit(tree, "code", (node) => {
@@ -267,11 +260,7 @@ const autolink: AutolinkOptions = {
   content: { type: "text", value: "#" },
 }
 
-/**
- * mx-space 的容器写法：`::: info`（冒号后有空格）、`::: warning 标题`。
- * remark-directive 只认 `:::name`，这里在解析前改写一下，原文不动：
- *   info / warning / error / success / note / tip → banner；gallery、grid、details 原样去掉空格
- */
+/** mx-space 的 `::: info 标题` 改写成 `:::banner[标题]{type=info}`；其他名字去掉空格 */
 const MX_BANNER: Record<string, string> = {
   info: "info",
   note: "info",
@@ -294,7 +283,7 @@ export function mxCompat(markdown: string) {
   )
 }
 
-/** 文章 / 手记 / 页面：作者可信，完整语法 */
+/** 文章 / 手记 / 页面：完整语法 */
 export async function renderMarkdown(markdown: string, opts: RenderOptions = {}): Promise<Rendered> {
   let excerpt = ""
   let toc: TocItem[] = []
@@ -325,7 +314,7 @@ export async function renderMarkdown(markdown: string, opts: RenderOptions = {})
   return { html: String(file), toc, excerpt }
 }
 
-// 评论：只开行内语法，不要指令、公式、原始 HTML；最后过 rehype-sanitize
+// 评论：只有行内语法，经过 rehype-sanitize
 const commentSchema: SanitizeSchema = {
   ...defaultSchema,
   tagNames: [...(defaultSchema.tagNames ?? []), "mark", "ins"],

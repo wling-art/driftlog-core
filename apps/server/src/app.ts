@@ -15,8 +15,17 @@ import { fileRoutes } from "./routes/files"
 import { adminRoutes } from "./routes/admin"
 import { extrasRoutes } from "./routes/extras"
 
+const origins = [env.BLOG_URL, env.ADMIN_URL]
+const safeMethods = new Set(["GET", "HEAD", "OPTIONS"])
+
 export const app = new Elysia()
-  .use(cors({ origin: [env.BLOG_URL, env.ADMIN_URL], credentials: true }))
+  .use(cors({ origin: origins, credentials: true }))
+  // 拒绝其他站点发来的写请求
+  .onRequest(({ request }) => {
+    const origin = request.headers.get("origin")
+    if (origin && !safeMethods.has(request.method) && origin !== env.PUBLIC_URL && !origins.includes(origin))
+      return new Response("来源不对", { status: 403 })
+  })
   .use(
     openapi({
       path: "/openapi",
@@ -41,8 +50,7 @@ export const app = new Elysia()
   .get(
     "/search",
     async ({ query, request, server, status }) => {
-      if (!(await rateLimit(`search:${clientIp(request, server?.requestIP(request)?.address)}`, 30, 10)))
-        return status(429, "搜得太快了")
+      if (!(await rateLimit(`search:${clientIp(request, server)}`, 30, 10))) return status(429, "搜得太快了")
       return search(query.q, query.limit)
     },
     {

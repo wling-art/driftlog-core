@@ -1,13 +1,12 @@
 /*
- * 从 mx-space（PostgreSQL 版 mx-core）导入内容。
+ * 从 mx-space（PostgreSQL 版 mx-core）导入内容，可重复跑（按 legacy_id 更新）。
  *
  *   MX_DATABASE_URL=postgres://…/mx_core MX_STATIC_DIR=…/mx-space/static bun src/cli/import-mx.ts
  *
- * - 源库只读：连接一建立就设成只读事务，服务端不确认就直接退出。
- * - 可以重复跑：每张表按源库的 id（legacy_id）更新，不会重复插入。
- * - 导入：文章 / 手记 / 页面、分类、手记专栏、评论、AI 摘要和翻译、旧 slug 跳转、一言、动态、友链、项目、站点设置；
- *   正文、封面和头像里旧站的图片从 MX_STATIC_DIR 读出，走新站的上传流程（去重、WebP、多尺寸），再改写成新地址。
- * - 不导入：访问统计明细、修订历史、serverless 片段、读者账号、各种第三方密钥。
+ * - 源库连接设为只读，确认不了就退出。
+ * - 导入：文章 / 手记 / 页面、分类、手记专栏、评论、AI 摘要和翻译、旧 slug 跳转、一言、动态、友链、项目、站点设置。
+ * - 旧站图片从 MX_STATIC_DIR 读出，重新上传后改写地址。
+ * - 不导入：访问统计、修订历史、serverless 片段、读者账号、第三方密钥。
  */
 import { SQL } from "bun"
 import { eq, sql } from "drizzle-orm"
@@ -46,7 +45,7 @@ console.log("源库已连接（只读）")
 type Row = Record<string, any>
 const log = (what: string, n: number) => console.log(`  ${what}：${n}`)
 
-// ---------- 图片：旧站 /api/v2|v3/objects/<kind>/<name> 从 static 目录读出来重新上传 ----------
+// ---------- 图片：/api/v*/objects/<kind>/<name> → 新地址 ----------
 const OLD_OBJECT =
   /https?:\/\/mixspace\.crashvibe\.cn\/api\/v\d+\/objects\/(image|file|avatar|icon)\/([\w.-]+)/g
 const moved = new Map<string, string | null>()
@@ -97,7 +96,7 @@ const settings: SiteSettings = {
   },
 }
 const [{ value: siteLikes }] = await src`select value from options where name = 'like'`
-// 站点设置只在第一次导入时写入；点赞数取较大值
+// 站点设置只在第一次写入；喜欢数取较大值
 await db
   .insert(siteSettings)
   .values({ id: 1, value: settings, likes: Number(siteLikes) || 0 })
@@ -173,7 +172,7 @@ async function upsertEntry(
     .returning({ id: entries.id })
   entryId.set(source.id, row!.id)
   entryIds.push(row!.id)
-  await syncRefs(row!.id, extractFileHashes(body))
+  await syncRefs(row!.id, extractFileHashes(body, values.cover))
 }
 
 for (const p of await src`select * from posts order by created_at`) {
@@ -192,7 +191,7 @@ for (const p of await src`select * from posts order by created_at`) {
 }
 log("文章", (await src`select count(*)::int n from posts`)[0].n)
 
-// 手记的 slug 用原来的编号：旧链接 /notes/12 直接能打开
+// 手记的 slug 用原编号 nid
 for (const n of await src`select * from notes order by nid`) {
   await upsertEntry(n, {
     type: "note",
@@ -217,7 +216,7 @@ for (const pg of await src`select * from pages order by "order"`) {
 }
 log("页面", (await src`select count(*)::int n from pages`)[0].n)
 
-// ---------- 旧 slug 跳转：slug_trackers 里记的是改名前的地址 ----------
+// ---------- 旧 slug 跳转（slug_trackers） ----------
 let redirects = 0
 for (const t of await src`select distinct slug, type, target_id from slug_trackers`) {
   const id = entryId.get(t.target_id)
@@ -233,21 +232,19 @@ for (const t of await src`select distinct slug, type, target_id from slug_tracke
 }
 log("旧 slug 跳转", redirects)
 
-// ---------- 评论：按时间顺序导，父评论总在前面 ----------
+// ---------- 评论：按时间顺序导入 ----------
 const readers = new Map<string, Row>(
   (await src`select id, name, email from readers`).map((r: Row) => [r.id, r]),
 )
 const commentId = new Map<string, number>()
-// 旧站的回复关系丢了（parent_comment_id 全是空的，mx-space 从 MongoDB 迁到 PostgreSQL 时没带过来）。
-// 只能按规律补：站长在一篇下面的评论，如果前面已经有别人评论过，就当是回复最近的那一条。
-// ponytail: 启发式，只补站长的；读者之间的回复猜不出来，保持顶层
+// 没有 parent_comment_id 时：站长的评论当作回复同一条目下最近一条别人的评论
 const lastGuest = new Map<number, number>() // 条目 → 最近一条别人的评论（新 id）
-const seen = new Set<number>() // 已经有评论的条目
+const seen = new Set<number>() // 已有评论的条目
 let skipped = 0
 for (const c of await src`select * from comments where not coalesce(is_deleted, false) order by created_at`) {
   const target = entryId.get(c.ref_id)
   if (!target) {
-    skipped++ // 挂在动态之类没有导入成条目的内容上
+    skipped++
     continue
   }
   const reader = c.reader_id ? readers.get(c.reader_id) : undefined
@@ -284,7 +281,7 @@ for (const c of await src`select * from comments where not coalesce(is_deleted, 
 log("评论", commentId.size)
 if (skipped) log("跳过的评论（挂在未导入的内容上）", skipped)
 
-// ---------- AI 翻译：同一篇同一语言只留最新的；jp 统一成 ja ----------
+// ---------- AI 翻译：每篇每种语言取最新一条，jp 改成 ja ----------
 let translated = 0
 for (const t of await src`
   select distinct on (ref_id, case lang when 'jp' then 'ja' else lang end)
@@ -366,7 +363,7 @@ for (const p of await src`select * from projects order by created_at`) {
 }
 log("项目", (await src`select count(*)::int n from projects`)[0].n)
 
-// ---------- 收尾：搜索重建、缓存失效 ----------
+// ---------- 重建搜索、清缓存 ----------
 await setupSearch().catch(() => {})
 await meili
   .index("entries")

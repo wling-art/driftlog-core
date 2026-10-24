@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { backupDir, createBackup } from "../src/lib/backup"
 import { filesDir } from "../src/lib/storage"
 
-// 回归：Bun.Archive 写惰性 Bun.file 会得到 0 字节，备份必须先读成字节
+// 见 CLAUDE.md 的 Bun.Archive 一条
 test("备份包里的文件不是空的", async () => {
   const key = `zz/test-${Date.now()}.txt`
   await Bun.write(join(filesDir, key), "hello", { createPath: true })

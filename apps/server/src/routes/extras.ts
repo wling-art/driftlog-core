@@ -14,6 +14,7 @@ import {
 import {
   linkApplyInput,
   linkInput,
+  patchOf,
   projectInput,
   reaction,
   sayInput,
@@ -27,10 +28,7 @@ import { cached, invalidate, rateLimit, redis } from "../lib/redis"
 import { authPlugin, oauthProviders } from "../auth"
 import { clientIp } from "./comments"
 
-/*
- * 从 mx-space 带过来的功能：手记专栏、一言、动态、友链、项目、站点设置。
- * 公开接口只读（加缓存）；写接口只给站长。动态、项目的正文是 Markdown，存的时候渲染好。
- */
+// 站点设置、手记专栏、一言、动态、友链、项目
 
 const idParam = z.object({ id: z.coerce.number().int() })
 
@@ -46,14 +44,17 @@ export const getSettings = () =>
     return { ...(row?.value ?? defaultSettings), likes: row?.likes ?? 0 }
   })
 
-const ipOf = (request: Request, server: { requestIP(r: Request): { address: string } | null } | null) =>
-  clientIp(request, server?.requestIP(request)?.address)
-
 export const extrasRoutes = new Elysia({ tags: ["extras"] })
   .get("/site", async () => ({ ...(await getSettings()), oauth: oauthProviders }))
-  // 喜欢本站：同一个 IP 一年只算一次
+  // 喜欢本站：同一 IP 一年算一次
   .post("/site/like", async ({ request, server }) => {
-    const fresh = await redis.set(`like:site:${ipOf(request, server)}`, "1", "EX", String(365 * 86400), "NX")
+    const fresh = await redis.set(
+      `like:site:${clientIp(request, server)}`,
+      "1",
+      "EX",
+      String(365 * 86400),
+      "NX",
+    )
     if (!fresh) return { likes: (await getSettings()).likes, counted: false }
     const [row] = await db
       .insert(siteSettings)
@@ -95,12 +96,12 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
         .orderBy(desc(thoughts.createdAt)),
     ),
   )
-  // 顶 / 踩：同一个 IP 对同一条只算一次
+  // 顶 / 踩：同一 IP 每条算一次
   .post(
     "/thoughts/:id/react",
     async ({ params, body, request, server }) => {
       const fresh = await redis.set(
-        `react:${params.id}:${ipOf(request, server)}`,
+        `react:${params.id}:${clientIp(request, server)}`,
         body.kind,
         "EX",
         String(365 * 86400),
@@ -122,7 +123,7 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
     },
     { params: idParam, body: z.object({ kind: reaction }) },
   )
-  // 友链不分先后：缓存里是固定顺序，每次响应再洗一遍（Fisher–Yates）
+  // 友链每次随机排序
   .get("/links", async () => {
     const rows = await cached("links", 600, () =>
       db
@@ -144,11 +145,11 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
     }
     return rows
   })
-  // 申请友链：进后台待审核
+  // 申请友链（待审核）
   .post(
     "/links/apply",
     async ({ body, request, server, status }) => {
-      if (!(await rateLimit(`link-apply:${ipOf(request, server)}`, 3, 3600)))
+      if (!(await rateLimit(`link-apply:${clientIp(request, server)}`, 3, 3600)))
         return status(429, "申请太频繁了，一小时后再来")
       const [dup] = await db.select({ id: links.id }).from(links).where(eq(links.url, body.url))
       if (dup) return status(409, "这个网址已经申请过了，等站长审核就好")
@@ -186,7 +187,7 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
         "/topics/:id",
         async ({ params, body }) =>
           done((await db.update(topics).set(body).where(eq(topics.id, params.id)).returning())[0]),
-        { params: idParam, body: topicInput.partial() },
+        { params: idParam, body: patchOf(topicInput) },
       )
       .delete(
         "/topics/:id",
@@ -223,7 +224,7 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
           params: idParam,
         },
       )
-      // 友链：列表带待审核的；审核就是改 state
+      // 友链（含待审核数）
       .get("/links", async () => {
         const rows = await db.select().from(links).orderBy(desc(links.createdAt))
         const [pending] = await db.select({ n: count() }).from(links).where(eq(links.state, "pending"))
@@ -236,7 +237,7 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
         "/links/:id",
         async ({ params, body }) =>
           done((await db.update(links).set(body).where(eq(links.id, params.id)).returning())[0]),
-        { params: idParam, body: linkInput.partial() },
+        { params: idParam, body: patchOf(linkInput) },
       )
       .delete(
         "/links/:id",
@@ -272,7 +273,7 @@ export const extrasRoutes = new Elysia({ tags: ["extras"] })
             )[0],
           )
         },
-        { params: idParam, body: projectInput.partial() },
+        { params: idParam, body: patchOf(projectInput) },
       )
       .delete(
         "/projects/:id",
@@ -294,7 +295,7 @@ const publicProject = {
   html: projects.html,
 }
 
-/** 写完清缓存，把结果原样返回 */
+/** 清缓存，原样返回结果 */
 async function done<T>(result: T) {
   await invalidate()
   return result

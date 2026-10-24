@@ -38,7 +38,7 @@ function CommentMail({
   )
 }
 
-/** 没配 Resend 就不发（返回 false） */
+/** 没配 Resend 时不发，返回 false */
 export async function sendCommentMail(to: string, props: Parameters<typeof CommentMail>[0]) {
   if (!resend) return false
   const { error } = await resend.emails.send({

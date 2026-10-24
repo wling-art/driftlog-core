@@ -9,11 +9,11 @@ import { cached, invalidate, rateLimit } from "../lib/redis"
 import { enqueue } from "../jobs/queue"
 import { authPlugin } from "../auth"
 
-// Gravatar（SHA-256，不把邮箱本身发出去）；没设头像的返回 404，前台退回首字母头像
+// Gravatar 头像（SHA-256），没有头像时返回 404
 const gravatar = (email: string) =>
   `https://gravatar.com/avatar/${new Bun.CryptoHasher("sha256").update(email.trim().toLowerCase()).digest("hex")}?d=404&s=80`
 
-// 公开字段：不带邮箱和 IP
+// 公开字段，不含邮箱和 IP
 const publicComment = (c: typeof comments.$inferSelect) => ({
   id: c.id,
   parentId: c.parentId,
@@ -24,10 +24,13 @@ const publicComment = (c: typeof comments.$inferSelect) => ({
   createdAt: c.createdAt,
 })
 
-export const clientIp = (request: Request, fallback?: string) =>
+export const clientIp = (
+  request: Request,
+  server: { requestIP(r: Request): { address: string } | null } | null,
+) =>
   request.headers.get("cf-connecting-ip") ??
   request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-  fallback ??
+  server?.requestIP(request)?.address ??
   "unknown"
 
 const idParam = z.object({ id: z.coerce.number().int() })
@@ -42,7 +45,7 @@ export const commentRoutes = new Elysia({ tags: ["comments"] })
           await db
             .select()
             .from(comments)
-            // 悄悄话只有站长在后台看得到
+            // 不含悄悄话
             .where(
               and(
                 eq(comments.entryId, query.entryId),
@@ -58,7 +61,7 @@ export const commentRoutes = new Elysia({ tags: ["comments"] })
   .post(
     "/comments",
     async ({ body, user, request, server, status }) => {
-      const ip = clientIp(request, server?.requestIP(request)?.address)
+      const ip = clientIp(request, server)
       if (!(await rateLimit(`comment:${ip}`, 5, 60))) return status(429, "评论太快了，歇一分钟再来")
       const [e] = await db
         .select({ id: entries.id })

@@ -17,7 +17,7 @@ bun run build        # bun build --compile → apps/server/dist/driftlog-server
 
 `WORKER=off` starts the API without the BullMQ worker.
 
-**Databases**: real content lives in `driftlog` on the home server (`HuaweiLocal`, 100.116.95.52, Postgres 17 in the `postgresql` container). The old mx-space database `mx_core` on the same server is **read-only for us**: never write to it. Tests (`bun test`) run against the **local empty** `driftlog` database (`postgres://postgres@localhost:5432/driftlog`), never the remote one; `apps/server/.env` points dev at the remote DB, so run tests from the repo root where that `.env` isn't loaded.
+**Databases**: real content lives in `driftlog` on the home server (`HuaweiLocal`, Postgres 17 in the `postgresql` container). The old mx-space database `mx_core` on the same server is **read-only for us**: never write to it. Tests (`bun test`) run against the **local empty** `driftlog` database (`postgres://postgres@localhost:5432/driftlog`), never the remote one; `apps/server/.env` points dev at the remote DB, so run tests from the repo root where that `.env` isn't loaded.
 
 **Importing from mx-space** (re-runnable; upserts by source id into `legacy_id`; connection is forced read-only and aborts otherwise):
 

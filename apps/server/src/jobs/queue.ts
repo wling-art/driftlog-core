@@ -15,7 +15,6 @@ import { broadcast } from "../lib/realtime"
 import { fetchLinkMeta } from "../lib/linkcard"
 import { invalidate } from "../lib/redis"
 
-// BullMQ 用 Bun 内置的 Redis 客户端
 const connection = () => createBunRedisClient(new RedisClient(env.REDIS_URL))
 
 type Jobs = {
@@ -46,7 +45,7 @@ const handlers: { [N in Name]: (data: Jobs[N]) => Promise<unknown> } = {
     if (!aiEnabled || !e?.published || e.type === "page" || (e.summary && !bodyChanged)) return
     await db
       .update(entries)
-      .set({ summary: await summarize(e.title, e.body), updatedAt: sql`${entries.updatedAt}` }) // AI 摘要不算作者改过
+      .set({ summary: await summarize(e.title, e.body), updatedAt: sql`${entries.updatedAt}` })
       .where(eq(entries.id, id))
     await invalidate()
   },
@@ -69,11 +68,10 @@ const handlers: { [N in Name]: (data: Jobs[N]) => Promise<unknown> } = {
     const base = { title: e.title, author: c.author, body: c.body, url }
     const [owner] = await db.select({ email: user.email }).from(user).where(eq(user.role, "owner"))
     const ownerEmail = env.OWNER_EMAIL ?? owner?.email
-    if (c.parentId) {
-      const [parent] = await db.select().from(comments).where(eq(comments.id, c.parentId))
-      if (parent && parent.email !== c.email) await sendCommentMail(parent.email, { ...base, reply: true })
-    }
-    if (ownerEmail && ownerEmail !== c.email) await sendCommentMail(ownerEmail, { ...base, reply: false })
+    const [parent] = c.parentId ? await db.select().from(comments).where(eq(comments.id, c.parentId)) : []
+    if (parent && parent.email !== c.email) await sendCommentMail(parent.email, { ...base, reply: true })
+    if (ownerEmail && ownerEmail !== c.email && ownerEmail !== parent?.email)
+      await sendCommentMail(ownerEmail, { ...base, reply: false })
   },
 
   async translate({ id, lang }) {

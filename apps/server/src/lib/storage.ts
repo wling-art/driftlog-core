@@ -1,16 +1,16 @@
-import { S3Client } from "bun"
+import { S3Client, type BunFile, type S3File } from "bun"
 import { join } from "node:path"
 import { env } from "../env"
 
-// 存储适配层：本地磁盘（默认）或 S3 兼容存储。key 形如 ab/abcdef….webp
+// 文件存储：本地磁盘或 S3。key 形如 ab/<哈希>.webp
 export interface Storage {
   put(key: string, data: Uint8Array | Blob, type: string): Promise<void>
-  get(key: string): Blob | null
+  get(key: string): BunFile | S3File | null
   delete(key: string): Promise<void>
   url(key: string): string
 }
 
-const filesDir = join(env.DATA_DIR, "files")
+export const filesDir = join(env.DATA_DIR, "files")
 
 const local: Storage = {
   async put(key, data) {
@@ -29,7 +29,8 @@ const local: Storage = {
 }
 
 function s3(): Storage {
-  const client = new S3Client() // 读 S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_BUCKET / S3_ENDPOINT
+  // 读 S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_BUCKET / S3_ENDPOINT
+  const client = new S3Client()
   return {
     async put(key, data, type) {
       await client.write(key, data, { type })
@@ -41,4 +42,3 @@ function s3(): Storage {
 }
 
 export const storage: Storage = env.STORAGE === "s3" ? s3() : local
-export { filesDir }

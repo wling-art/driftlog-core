@@ -4,13 +4,13 @@ import type { App } from "@driftlog/server"
 export type { App }
 export * from "@driftlog/schema"
 
-/** 前台和后台共用的类型安全客户端。浏览器里带上 cookie（Better Auth 会话） */
+/** 类型安全的 API 客户端，请求带 cookie */
 export function createClient(url: string, options: Treaty.Config = {}) {
   return treaty<App>(url, { ...options, fetch: { credentials: "include", ...options.fetch } })
 }
 export type Client = ReturnType<typeof createClient>
 
-/** 把 Eden 的 { data, error } 变成「成功返回 data，失败抛错」，给 TanStack Query 用 */
+/** Eden 结果：成功返回 data，失败抛错 */
 export async function unwrap<T>(
   p: Promise<{ data: T; error: null } | { data: null; error: { status: unknown; value: unknown } }>,
 ) {

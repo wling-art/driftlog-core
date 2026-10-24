@@ -1,5 +1,5 @@
-import { and, eq, inArray, isNotNull, isNull, lt, notExists, sql } from "drizzle-orm"
-import { fileRefs, files, type FileVariant } from "@driftlog/db"
+import { and, eq, inArray, isNotNull, isNull, lt, not, notExists, notInArray, sql } from "drizzle-orm"
+import { fileRefs, files, links, projects, siteSettings, thoughts, type FileVariant } from "@driftlog/db"
 import { db } from "./db"
 import { storage } from "./storage"
 
@@ -12,9 +12,7 @@ const WIDTHS = [640, 1280, 1920]
 const extOf = (mime: string) =>
   ({ "image/gif": "gif", "video/mp4": "mp4", "video/webm": "webm", "application/pdf": "pdf" })[mime] ?? "bin"
 
-/**
- * 上传：按内容哈希去重命名；位图一律转 WebP（重新编码顺带去掉 EXIF），再出几档宽度的衍生图和 ThumbHash 占位图
- */
+/** 保存上传：按内容哈希去重；位图转 WebP，生成多档宽度和 ThumbHash */
 export async function saveUpload(file: File) {
   if (!RASTER.has(file.type) && !PASSTHROUGH.has(file.type))
     throw new Error(`不支持的文件类型：${file.type || "未知"}`)
@@ -63,7 +61,7 @@ export async function saveUpload(file: File) {
   return row ?? (await db.select().from(files).where(eq(files.hash, hash)))[0]!
 }
 
-/** 正文里出现的文件：…/ab/<64 位哈希>… */
+/** 文本里出现的文件哈希（…/ab/<哈希>…） */
 export function extractFileHashes(...texts: (string | null | undefined)[]) {
   const set = new Set<string>()
   for (const t of texts)
@@ -71,7 +69,7 @@ export function extractFileHashes(...texts: (string | null | undefined)[]) {
   return [...set]
 }
 
-/** 保存文章时同步引用表 */
+/** 同步条目的文件引用 */
 export async function syncRefs(entryId: number, hashes: string[]) {
   await db.transaction(async (tx) => {
     await tx.delete(fileRefs).where(eq(fileRefs.entryId, entryId))
@@ -84,27 +82,40 @@ export async function syncRefs(entryId: number, hashes: string[]) {
 
 const unreferenced = notExists(db.select().from(fileRefs).where(eq(fileRefs.fileId, files.id)))
 
-/** 孤儿检测（定时任务）：上传满一天还没人引用的，标记 orphanSince；重新被引用的清掉标记 */
+/** 条目以外用到的文件：动态、项目、友链头像、站点设置 */
+async function usedElsewhere() {
+  const [t, p, l, s] = await Promise.all([
+    db.select({ v: thoughts.content }).from(thoughts),
+    db.select({ body: projects.body, avatar: projects.avatar }).from(projects),
+    db.select({ v: links.avatar }).from(links),
+    db.select({ v: siteSettings.value }).from(siteSettings),
+  ])
+  return extractFileHashes(
+    ...t.map((r) => r.v),
+    ...p.flatMap((r) => [r.body, r.avatar]),
+    ...l.map((r) => r.v),
+    ...s.map((r) => JSON.stringify(r.v)),
+  )
+}
+const orphan = (used: string[]) => and(unreferenced, notInArray(files.hash, used))
+
+/** 定时任务：上传满一天没人用的标记 orphanSince，又被用到的清掉标记 */
 export async function scanOrphans() {
+  const used = await usedElsewhere()
   const dayAgo = new Date(Date.now() - 86400_000)
   const marked = await db
     .update(files)
     .set({ orphanSince: sql`now()` })
-    .where(and(isNull(files.orphanSince), lt(files.createdAt, dayAgo), unreferenced))
+    .where(and(isNull(files.orphanSince), lt(files.createdAt, dayAgo), orphan(used)))
     .returning({ id: files.id })
   await db
     .update(files)
     .set({ orphanSince: null })
-    .where(
-      and(
-        isNotNull(files.orphanSince),
-        sql`exists (select 1 from ${fileRefs} where ${fileRefs.fileId} = ${files.id})`,
-      ),
-    )
+    .where(and(isNotNull(files.orphanSince), not(orphan(used)!)))
   return marked.length
 }
 
-/** 删除文件和它的衍生图 */
+/** 删除文件和衍生图 */
 export async function deleteFile(id: number) {
   const [f] = await db.delete(files).where(eq(files.id, id)).returning()
   if (!f) return false
@@ -112,12 +123,12 @@ export async function deleteFile(id: number) {
   return true
 }
 
-/** 清理：删掉已标记为孤儿、而且仍然没人引用的文件（后台手动触发） */
+/** 删掉已标记、仍然没人用的文件 */
 export async function purgeOrphans() {
   const rows = await db
     .select({ id: files.id })
     .from(files)
-    .where(and(isNotNull(files.orphanSince), unreferenced))
+    .where(and(isNotNull(files.orphanSince), orphan(await usedElsewhere())))
   for (const r of rows) await deleteFile(r.id)
   return rows.length
 }

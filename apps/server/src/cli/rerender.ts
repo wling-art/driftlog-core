@@ -1,10 +1,8 @@
 /*
- * 用当前的 Markdown 管线重新渲染所有条目（正文里的新语法、链接卡片、视频卡片才会生效）。
+ * 用当前 Markdown 管线重新渲染所有条目，只改 html / toc / excerpt，不改 updatedAt。
  *
- *   bun src/cli/rerender.ts          # 只看会变哪些
- *   bun src/cli/rerender.ts --write  # 真的写回
- *
- * 只改 html / toc / excerpt，不动更新时间（重新渲染不算作者改过）。翻译只存了 HTML，改不了。
+ *   bun src/cli/rerender.ts          # 列出会变的
+ *   bun src/cli/rerender.ts --write  # 写回
  */
 import { eq, sql } from "drizzle-orm"
 import { entries } from "@driftlog/db"

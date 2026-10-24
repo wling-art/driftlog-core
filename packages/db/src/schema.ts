@@ -28,7 +28,7 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
-  role: text("role").notNull().default("reader"), // owner | reader，第一个注册的人是 owner
+  role: text("role").notNull().default("reader"), // owner | reader
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
@@ -103,7 +103,7 @@ export const categories = pgTable("categories", {
   createdAt: createdAt(),
 })
 
-// 手记专栏：手记按专栏归类（像文章按分类）
+// 手记专栏
 export const topics = pgTable("topics", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -111,11 +111,11 @@ export const topics = pgTable("topics", {
   description: text("description").notNull().default(""),
   introduce: text("introduce").notNull().default(""), // 一句话介绍
   sort: integer("sort").notNull().default(0),
-  legacyId: text("legacy_id").unique(), // 从 mx-space 导入时的原 id，重复导入按它更新
+  legacyId: text("legacy_id").unique(), // mx-space 里的 id
   createdAt: createdAt(),
 })
 
-// 文章 / 手记 / 页面共用一张表（ponytail: 字段几乎一样，拆表只会多三份 CRUD）
+// 文章 / 手记 / 页面
 export const entries = pgTable(
   "entries",
   {
@@ -140,7 +140,7 @@ export const entries = pgTable(
     mood: text("mood"),
     weather: text("weather"),
     topicId: integer("topic_id").references(() => topics.id, { onDelete: "set null" }),
-    copyright: boolean("copyright").notNull().default(true), // 文末显示版权声明
+    copyright: boolean("copyright").notNull().default(true), // 文末版权声明
     views: integer("views").notNull().default(0),
     likes: integer("likes").notNull().default(0),
     legacyId: text("legacy_id").unique(),
@@ -183,9 +183,9 @@ export const comments = pgTable(
     body: text("body").notNull(),
     html: text("html").notNull(),
     status: commentStatus("status").notNull().default("pending"),
-    private: boolean("private").notNull().default(false), // 悄悄话：只有站长看得到
+    private: boolean("private").notNull().default(false), // 悄悄话，只有站长看得到
     location: text("location"),
-    avatar: text("avatar"), // 明确的头像（登录账号的头像、旧站导进来的 GitHub 头像）；没有就用 Gravatar
+    avatar: text("avatar"), // 为空时用 Gravatar
     legacyId: text("legacy_id").unique(),
     ip: text("ip"),
     userAgent: text("user_agent"),
@@ -199,7 +199,7 @@ export type FileVariant = { width: number; key: string }
 
 export const files = pgTable("files", {
   id: serial("id").primaryKey(),
-  hash: text("hash").notNull().unique(), // 内容哈希，去重 + 命名
+  hash: text("hash").notNull().unique(), // 内容 SHA-256
   key: text("key").notNull(), // 存储里的路径
   name: text("name").notNull(), // 原文件名
   mime: text("mime").notNull(),
@@ -225,9 +225,9 @@ export const fileRefs = pgTable(
   (t) => [primaryKey({ columns: [t.fileId, t.entryId] })],
 )
 
-// ---------- mx-space 带过来的功能 ----------
+// ---------- 其他 ----------
 
-// 旧地址跳转：改过 slug 的文章，旧 slug 还能打开（301 到新地址）
+// 旧 slug → 条目
 export const slugRedirects = pgTable(
   "slug_redirects",
   {
@@ -240,7 +240,7 @@ export const slugRedirects = pgTable(
   (t) => [primaryKey({ columns: [t.type, t.oldSlug] })],
 )
 
-// 一言：一句话 + 出处
+// 一言
 export const says = pgTable("says", {
   id: serial("id").primaryKey(),
   text: text("text").notNull(),
@@ -250,7 +250,7 @@ export const says = pgTable("says", {
   createdAt: createdAt(),
 })
 
-// 动态：比手记更短的碎片（Shiro 的 /thinking），可以顶 / 踩
+// 动态：短文，可以顶 / 踩
 export const thoughts = pgTable("thoughts", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
@@ -265,7 +265,7 @@ export const thoughts = pgTable("thoughts", {
 export const linkType = pgEnum("link_type", ["friend", "collection"])
 export const linkState = pgEnum("link_state", ["approved", "pending", "outdated", "rejected"])
 
-// 友链：读者可以申请（pending），站长审核
+// 友链
 export const links = pgTable("links", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -294,7 +294,7 @@ export const projects = pgTable("projects", {
   createdAt: createdAt(),
 })
 
-// 站点设置：只有一行（id = 1）
+// 站点设置：只有 id = 1 一行
 export type SiteSettings = {
   title: string
   description: string
