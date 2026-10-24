@@ -21,10 +21,10 @@ const safeMethods = new Set(["GET", "HEAD", "OPTIONS"])
 export const app = new Elysia()
   .use(cors({ origin: origins, credentials: true }))
   // 拒绝其他站点发来的写请求
-  .onRequest(({ request }) => {
+  .onRequest(({ request, status }) => {
     const origin = request.headers.get("origin")
     if (origin && !safeMethods.has(request.method) && origin !== env.PUBLIC_URL && !origins.includes(origin))
-      return new Response("来源不对", { status: 403 })
+      return status(403, "来源不对")
   })
   .use(
     openapi({
