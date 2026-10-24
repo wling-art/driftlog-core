@@ -304,5 +304,6 @@ export type SiteSettings = {
 export const siteSettings = pgTable("site_settings", {
   id: integer("id").primaryKey().default(1),
   value: jsonb("value").$type<SiteSettings>().notNull(),
+  likes: integer("likes").notNull().default(0),
   updatedAt: updatedAt(),
 })

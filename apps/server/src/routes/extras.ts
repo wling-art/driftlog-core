@@ -41,18 +41,28 @@ export const defaultSettings: SiteSettings = {
   owner: { name: "wling", introduce: "", avatar: null, socials: {} },
 }
 export const getSettings = () =>
-  cached(
-    "site",
-    600,
-    async () =>
-      (await db.select().from(siteSettings).where(eq(siteSettings.id, 1)))[0]?.value ?? defaultSettings,
-  )
+  cached("site", 600, async () => {
+    const [row] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1))
+    return { ...(row?.value ?? defaultSettings), likes: row?.likes ?? 0 }
+  })
 
 const ipOf = (request: Request, server: { requestIP(r: Request): { address: string } | null } | null) =>
   clientIp(request, server?.requestIP(request)?.address)
 
 export const extrasRoutes = new Elysia({ tags: ["extras"] })
   .get("/site", async () => ({ ...(await getSettings()), oauth: oauthProviders }))
+  // 喜欢本站：同一个 IP 一年只算一次
+  .post("/site/like", async ({ request, server }) => {
+    const fresh = await redis.set(`like:site:${ipOf(request, server)}`, "1", "EX", String(365 * 86400), "NX")
+    if (!fresh) return { likes: (await getSettings()).likes, counted: false }
+    const [row] = await db
+      .insert(siteSettings)
+      .values({ id: 1, value: defaultSettings, likes: 1 })
+      .onConflictDoUpdate({ target: siteSettings.id, set: { likes: sql`${siteSettings.likes} + 1` } })
+      .returning({ likes: siteSettings.likes })
+    await invalidate()
+    return { likes: row!.likes, counted: true }
+  })
   .get("/topics", () =>
     cached("topics", 600, () =>
       db

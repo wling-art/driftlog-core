@@ -1,12 +1,12 @@
 /*
  * 从 mx-space（PostgreSQL 版 mx-core）导入内容。
  *
- *   MX_DATABASE_URL=postgres://…/mx_core bun src/cli/import-mx.ts
+ *   MX_DATABASE_URL=postgres://…/mx_core MX_STATIC_DIR=…/mx-space/static bun src/cli/import-mx.ts
  *
  * - 源库只读：连接一建立就设成只读事务，服务端不确认就直接退出。
  * - 可以重复跑：每张表按源库的 id（legacy_id）更新，不会重复插入。
  * - 导入：文章 / 手记 / 页面、分类、手记专栏、评论、AI 摘要和翻译、旧 slug 跳转、一言、动态、友链、项目、站点设置；
- *   正文和头像里旧站的图片下载下来，走新站的上传流程（去重、WebP、多尺寸），再改写成新地址。
+ *   正文、封面和头像里旧站的图片从 MX_STATIC_DIR 读出，走新站的上传流程（去重、WebP、多尺寸），再改写成新地址。
  * - 不导入：访问统计明细、修订历史、serverless 片段、读者账号、各种第三方密钥。
  */
 import { SQL } from "bun"
@@ -34,6 +34,8 @@ import { meili, setupSearch, syncSearch } from "../lib/search"
 
 const SRC = process.env.MX_DATABASE_URL
 if (!SRC) throw new Error("设置 MX_DATABASE_URL（源库 mx_core 的连接串）")
+const STATIC = process.env.MX_STATIC_DIR
+if (!STATIC) throw new Error("设置 MX_STATIC_DIR（旧站数据目录里的 static）")
 
 const src = new SQL(SRC, { max: 1 })
 await src`set default_transaction_read_only = on`
@@ -44,22 +46,23 @@ console.log("源库已连接（只读）")
 type Row = Record<string, any>
 const log = (what: string, n: number) => console.log(`  ${what}：${n}`)
 
-// ---------- 图片：旧站的 /api/v2|v3/objects/<kind>/<name> 下载后重新上传 ----------
+// ---------- 图片：旧站 /api/v2|v3/objects/<kind>/<name> 从 static 目录读出来重新上传 ----------
 const OLD_OBJECT =
   /https?:\/\/mixspace\.crashvibe\.cn\/api\/v\d+\/objects\/(image|file|avatar|icon)\/([\w.-]+)/g
 const moved = new Map<string, string | null>()
 async function moveFile(url: string, kind: string, name: string) {
   if (moved.has(url)) return moved.get(url)
-  const res = await fetch(`https://mixspace.crashvibe.cn/api/v3/objects/${kind}/${name}`).catch(() => null)
+  const file = Bun.file(`${STATIC}/${kind}/${name}`)
   let next: string | null = null
-  if (res?.ok) {
-    const type = res.headers.get("content-type")?.split(";")[0] ?? "application/octet-stream"
+  if (await file.exists()) {
     try {
-      next = publicFile(await saveUpload(new File([await res.arrayBuffer()], name, { type }))).url
+      next = publicFile(
+        await saveUpload(new File([await file.bytes()], name, { type: file.type.split(";")[0] })),
+      ).url
     } catch (e) {
       console.warn(`  ! ${name} 没存上：${(e as Error).message}`)
     }
-  } else console.warn(`  ! ${name} 下载不到（${res?.status ?? "网络错误"}），保留原地址`)
+  } else console.warn(`  ! ${name} 不在 static 目录，保留原地址`)
   moved.set(url, next)
   return next
 }
@@ -93,8 +96,16 @@ const settings: SiteSettings = {
     ),
   },
 }
-await db.insert(siteSettings).values({ id: 1, value: settings }).onConflictDoNothing() // 站点设置导过一次就归后台管：重复跑不覆盖后台改过的
-console.log(`站点设置：${settings.title}`)
+const [{ value: siteLikes }] = await src`select value from options where name = 'like'`
+// 站点设置只在第一次导入时写入；点赞数取较大值
+await db
+  .insert(siteSettings)
+  .values({ id: 1, value: settings, likes: Number(siteLikes) || 0 })
+  .onConflictDoUpdate({
+    target: siteSettings.id,
+    set: { likes: sql`greatest(${siteSettings.likes}, excluded.likes)` },
+  })
+console.log(`站点设置：${settings.title}，点赞 ${Number(siteLikes) || 0}`)
 
 // ---------- 分类、专栏 ----------
 const categoryId = new Map<string, number>()
@@ -175,6 +186,7 @@ for (const p of await src`select * from posts order by created_at`) {
     pinned: p.pin_at != null,
     copyright: p.copyright ?? true,
     summary: p.summary || summaries.get(p.id) || null,
+    cover: (await rewrite(p.meta?.cover)) || null,
     publishedAt: p.created_at,
   })
 }
