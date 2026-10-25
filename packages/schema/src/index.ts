@@ -82,9 +82,15 @@ export type CommentInput = z.infer<typeof commentInput>
 
 export const reorderInput = z.object({ ids: z.array(z.number().int()) })
 
+/** 客户端发给服务端：当前所在页面（只用来统计在看的人） */
+export const clientWsEvent = z.object({
+  type: z.literal("page"),
+  path: z.string().startsWith("/").max(200),
+})
+
 /** WebSocket 事件 */
 export const wsEvent = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("online"), count: z.number() }),
+  z.object({ type: z.literal("online"), count: z.number(), pages: z.record(z.string(), z.number()) }),
   z.object({ type: z.literal("comment.created"), entryId: z.number(), commentId: z.number() }),
   z.object({
     type: z.literal("entry.published"),

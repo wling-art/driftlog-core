@@ -6,7 +6,8 @@ import { env } from "./env"
 import { log } from "./lib/log"
 import { rateLimit } from "./lib/redis"
 import { search } from "./lib/search"
-import { onlineChanged, TOPIC } from "./lib/realtime"
+import { clientWsEvent } from "@driftlog/schema"
+import { connected, disconnected, setPage, TOPIC } from "./lib/realtime"
 import { authPlugin } from "./auth"
 import { adminEntries, publicEntries } from "./routes/entries"
 import { categoryRoutes } from "./routes/categories"
@@ -64,13 +65,16 @@ export const app = new Elysia()
   .ws("/ws", {
     open(ws) {
       ws.subscribe(TOPIC)
-      onlineChanged(1)
+      connected(ws.raw)
     },
     close(ws) {
       ws.unsubscribe(TOPIC)
-      onlineChanged(-1)
+      disconnected(ws.raw)
     },
-    message() {},
+    message(ws, message) {
+      const parsed = clientWsEvent.safeParse(message)
+      if (parsed.success) setPage(ws.raw, parsed.data.path.split(/[?#]/)[0]!)
+    },
   })
 
 export type App = typeof app

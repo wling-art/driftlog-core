@@ -199,6 +199,14 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
     },
     { query: z.object({ type: entryType, slug: z.string() }) },
   )
+  // 是否已经喜欢过（按 IP）
+  .get(
+    "/:id/like",
+    async ({ params, request, server }) => ({
+      liked: Boolean(await redis.exists(`like:${params.id}:${clientIp(request, server)}`)),
+    }),
+    { params: z.object({ id: z.coerce.number().int() }) },
+  )
   // 喜欢：同一 IP 一年算一次
   .post(
     "/:id/like",

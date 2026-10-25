@@ -46,6 +46,9 @@ export const getSettings = () =>
 
 export const extrasRoutes = new Elysia({ tags: ["extras"] })
   .get("/site", async () => ({ ...(await getSettings()), oauth: oauthProviders }))
+  .get("/site/like", async ({ request, server }) => ({
+    liked: Boolean(await redis.exists(`like:site:${clientIp(request, server)}`)),
+  }))
   // 喜欢本站：同一 IP 一年算一次
   .post("/site/like", async ({ request, server }) => {
     const fresh = await redis.set(
