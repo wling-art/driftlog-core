@@ -41,12 +41,16 @@ export const enqueue = <N extends Name>(name: N, data: Jobs[N]) => queue.add(nam
 
 export const translateJobId = (id: number, lang: string) => `translate-${id}-${lang}`
 
-/** 排一个翻译任务；同一篇同一语言排队中的不重复，失败过的先清掉 */
+/** 排一个翻译任务；同一篇同一语言排队中或翻译中的不重复，已结束的先清掉 */
 export async function enqueueTranslate(id: number, lang: string) {
   const jobId = translateJobId(id, lang)
   const old = await queue.getJob(jobId)
-  if (old && (await old.isFailed())) await old.remove()
-  await queue.add("translate", { id, lang }, { jobId, removeOnComplete: true })
+  if (old) {
+    const state = await old.getState()
+    if (state === "waiting" || state === "active" || state === "delayed") return
+    await old.remove()
+  }
+  await queue.add("translate", { id, lang }, { jobId, removeOnComplete: 50 })
 }
 
 const handlers: { [N in Name]: (data: Jobs[N]) => Promise<unknown> } = {

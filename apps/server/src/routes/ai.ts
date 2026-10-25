@@ -1,6 +1,6 @@
 import { Elysia } from "elysia"
 import { z } from "zod"
-import { and, eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { aiSettings, entries, translations, type AiSettings } from "@driftlog/db"
 import { aiSettingsInput, translationInput } from "@driftlog/schema"
 import { renderMarkdown } from "@driftlog/markdown"
@@ -183,3 +183,66 @@ export const aiRoutes = new Elysia({ prefix: "/admin", tags: ["ai"] })
         }
     return { queued }
   })
+
+  // AI 队列：翻译任务的全部状态，其他任务只看进行中和失败的
+  .get("/queue", async () => {
+    const jobs = await queue.getJobs(["active", "waiting", "delayed", "failed", "completed"], 0, 60)
+    const ids = new Set<number>()
+    for (const j of jobs) {
+      const d = j.data as { id?: number }
+      if (typeof d.id === "number" && j.name !== "comment.created") ids.add(d.id)
+    }
+    const titles = new Map(
+      ids.size
+        ? (
+            await db
+              .select({ id: entries.id, title: entries.title })
+              .from(entries)
+              .where(inArray(entries.id, [...ids]))
+          ).map((e) => [e.id, e.title])
+        : [],
+    )
+    const rows = await Promise.all(
+      jobs.map(async (j) => {
+        const state = await j.getState()
+        const d = j.data as { id?: number; lang?: string }
+        return {
+          id: String(j.id),
+          name: j.name,
+          state,
+          entryId: d.id ?? null,
+          title: d.id ? (titles.get(d.id) ?? null) : null,
+          lang: d.lang ?? null,
+          attempts: j.attemptsMade,
+          error: j.failedReason || null,
+          createdAt: j.timestamp,
+          finishedAt: j.finishedOn ?? null,
+        }
+      }),
+    )
+    return {
+      counts: await queue.getJobCounts("active", "waiting", "delayed", "failed", "completed"),
+      jobs: rows
+        .filter((r) => r.name === "translate" || r.state === "failed" || r.state === "active")
+        .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)),
+    }
+  })
+  .post(
+    "/queue/:id/retry",
+    async ({ params, status }) => {
+      const j = await queue.getJob(params.id)
+      if (!j) return status(404, "任务不在了")
+      if ((await j.getState()) === "failed") await j.retry()
+      return { ok: true }
+    },
+    { params: z.object({ id: z.string() }) },
+  )
+  .delete(
+    "/queue/:id",
+    async ({ params }) => {
+      const j = await queue.getJob(params.id)
+      if (j && (await j.getState()) !== "active") await j.remove()
+      return { ok: true }
+    },
+    { params: z.object({ id: z.string() }) },
+  )
