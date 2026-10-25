@@ -26,7 +26,6 @@ export const env = z
     GOOGLE_CLIENT_ID: optional,
     GOOGLE_CLIENT_SECRET: optional,
     /** AI Gateway 的模型 id，不填就不开 AI */
-    AI_MODEL: optional,
     RESEND_API_KEY: optional,
     MAIL_FROM: z.string().default("Driftlog <noreply@example.com>"),
     OWNER_EMAIL: optional,

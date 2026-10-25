@@ -14,6 +14,7 @@ import { categoryRoutes } from "./routes/categories"
 import { clientIp, commentRoutes } from "./routes/comments"
 import { fileRoutes } from "./routes/files"
 import { adminRoutes } from "./routes/admin"
+import { aiRoutes } from "./routes/ai"
 import { extrasRoutes } from "./routes/extras"
 
 const origins = [env.BLOG_URL, env.ADMIN_URL]
@@ -47,6 +48,7 @@ export const app = new Elysia()
   .use(commentRoutes)
   .use(fileRoutes)
   .use(adminRoutes)
+  .use(aiRoutes)
   .use(extrasRoutes)
   .get(
     "/search",

@@ -4,7 +4,7 @@ import { count, desc, eq, gte, sql } from "drizzle-orm"
 import { comments, entries, files } from "@driftlog/db"
 import { db } from "../lib/db"
 import { backupFile, listBackups } from "../lib/backup"
-import { aiEnabled } from "../lib/ai"
+import { getAiSettings } from "../lib/ai"
 import { enqueue, queue } from "../jobs/queue"
 import { authPlugin } from "../auth"
 
@@ -13,6 +13,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin", tags: ["admin"] })
   .guard({ owner: true })
   .get("/me", ({ user }) => user)
   .get("/stats", async () => {
+    const ai = await getAiSettings()
     const since = new Date(Date.now() - 30 * 86400_000)
     const [byType, [pending], [fileStats], daily, top] = await Promise.all([
       db
@@ -43,7 +44,7 @@ export const adminRoutes = new Elysia({ prefix: "/admin", tags: ["admin"] })
       files: { count: fileStats?.n ?? 0, bytes: Number(fileStats?.bytes ?? 0) },
       daily,
       top,
-      aiEnabled,
+      aiEnabled: [ai.translation, ai.summary, ai.moderation].some((t) => t.enabled),
     }
   })
   .get("/backups", () => listBackups())

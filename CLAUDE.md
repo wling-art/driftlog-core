@@ -26,6 +26,8 @@ cd apps/server
 MX_DATABASE_URL=postgres://…/mx_core MX_STATIC_DIR=…/mx-space/static DATABASE_URL=postgres://…/driftlog DATA_DIR=… bun src/cli/import-mx.ts
 ```
 
+Import the old AI settings (providers, models, languages) once: `MX_DATABASE_URL=… bun src/cli/import-ai.ts`. Translation is an agent (`lib/translate.ts`): the model delivers through a `submit` tool, which rejects translations whose code blocks, links, headings or `:::` lines differ from the source, and the model fixes them. DeepSeek thinking mode rejects `tool_choice: required`, so tool choice stays auto.
+
 Rebuild the Meilisearch index (after restoring a DB or first deploy): `bun src/cli/reindex.ts` (needs `MEILI_URL`, `MEILI_KEY`).
 
 After changing the markdown pipeline, re-render stored entries (keeps `updated_at`; translations only store HTML, so they can't be re-rendered):
@@ -50,5 +52,5 @@ The old image host is gone: the import reads `/api/v*/objects/<kind>/<name>` fil
 ## Conventions
 
 - Shared validation lives in `packages/schema` and is used by the server, OpenAPI, and both web apps' forms.
-- Optional integrations (AI, Resend, Sentry, S3, OAuth) turn off silently when their env vars are missing. Keep that behavior.
+- Optional integrations (AI, Resend, Sentry, S3, OAuth; AI is configured in the DB, `ai_settings`, from the admin) turn off silently when their env vars are missing. Keep that behavior.
 - First sign-up (email) becomes the owner, the only one. After that email sign-up is blocked: readers sign in with GitHub / Google only (like mx-space), which needs `GITHUB_CLIENT_ID/SECRET` or `GOOGLE_…` in `.env`; `GET /site` lists the configured ones in `oauth`. The admin only lets the owner in (`/admin/*` is owner-only).

@@ -10,7 +10,7 @@ import { log } from "../lib/log"
 import { fetchLinkMeta } from "../lib/linkcard"
 import { extractFileHashes, syncRefs } from "../lib/files"
 import { broadcast } from "../lib/realtime"
-import { enqueue } from "../jobs/queue"
+import { enqueue, enqueueTranslate } from "../jobs/queue"
 import { authPlugin } from "../auth"
 import { clientIp } from "./comments"
 
@@ -292,7 +292,7 @@ export const adminEntries = new Elysia({ prefix: "/admin/entries", tags: ["admin
   .post(
     "/:id/translate",
     async ({ params, body }) => {
-      await enqueue("translate", { id: params.id, lang: body.lang })
+      await enqueueTranslate(params.id, body.lang)
       return { queued: true }
     },
     { params: idParam, body: z.object({ lang: z.string().min(2).max(10) }) },

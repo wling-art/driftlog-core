@@ -6,7 +6,8 @@ import { renderMarkdown } from "@driftlog/markdown"
 import { env } from "../env"
 import { db } from "../lib/db"
 import { log } from "../lib/log"
-import { aiEnabled, moderate, summarize, translate } from "../lib/ai"
+import { getAiSettings, moderate, summarize } from "../lib/ai"
+import { translateEntry } from "../lib/translate"
 import { syncSearch } from "../lib/search"
 import { scanOrphans } from "../lib/files"
 import { createBackup } from "../lib/backup"
@@ -38,23 +39,48 @@ export const queue = new Queue<Jobs[Name], unknown, Name>("driftlog", {
 
 export const enqueue = <N extends Name>(name: N, data: Jobs[N]) => queue.add(name, data)
 
+export const translateJobId = (id: number, lang: string) => `translate-${id}-${lang}`
+
+/** 排一个翻译任务；同一篇同一语言排队中的不重复，失败过的先清掉 */
+export async function enqueueTranslate(id: number, lang: string) {
+  const jobId = translateJobId(id, lang)
+  const old = await queue.getJob(jobId)
+  if (old && (await old.isFailed())) await old.remove()
+  await queue.add("translate", { id, lang }, { jobId, removeOnComplete: true })
+}
+
 const handlers: { [N in Name]: (data: Jobs[N]) => Promise<unknown> } = {
   async "entry.saved"({ id, bodyChanged }) {
     await syncSearch(id)
     const [e] = await db.select().from(entries).where(eq(entries.id, id))
-    if (!aiEnabled || !e?.published || e.type === "page" || (e.summary && !bodyChanged)) return
-    await db
-      .update(entries)
-      .set({ summary: await summarize(e.title, e.body), updatedAt: sql`${entries.updatedAt}` })
-      .where(eq(entries.id, id))
-    await invalidate()
+    if (!e?.published) return
+    const ai = await getAiSettings()
+    if (ai.summary.enabled && e.type !== "page" && (!e.summary || bodyChanged)) {
+      const summary = await summarize(e.title, e.body)
+      if (summary) {
+        await db
+          .update(entries)
+          .set({ summary, updatedAt: sql`${entries.updatedAt}` })
+          .where(eq(entries.id, id))
+        await invalidate()
+      }
+    }
+    if (ai.translation.enabled) {
+      const rows = await db
+        .select({ lang: translations.lang })
+        .from(translations)
+        .where(eq(translations.entryId, id))
+      const have = new Set(rows.map((t) => t.lang))
+      for (const lang of ai.translation.languages)
+        if (bodyChanged || !have.has(lang)) await enqueueTranslate(id, lang)
+    }
   },
 
   async "comment.created"({ id }) {
     const [c] = await db.select().from(comments).where(eq(comments.id, id))
     if (!c) return
     if (c.status === "pending") {
-      const status = aiEnabled ? (await moderate(c.body, c.author)).verdict : "approved"
+      const status = (await moderate(c.body, c.author))?.verdict ?? "approved"
       await db.update(comments).set({ status }).where(eq(comments.id, id))
       c.status = status
     }
@@ -76,16 +102,14 @@ const handlers: { [N in Name]: (data: Jobs[N]) => Promise<unknown> } = {
 
   async translate({ id, lang }) {
     const [e] = await db.select().from(entries).where(eq(entries.id, id))
-    if (!e || !aiEnabled) return
-    const t = await translate(e.title, e.body, lang)
+    if (!e) return
+    const t = await translateEntry(e.title, e.body, lang)
     const { html } = await renderMarkdown(t.body, { resolveLinkCard: fetchLinkMeta })
+    const row = { title: t.title, body: t.body, html, model: t.model }
     await db
       .insert(translations)
-      .values({ entryId: id, lang, title: t.title, html })
-      .onConflictDoUpdate({
-        target: [translations.entryId, translations.lang],
-        set: { title: t.title, html },
-      })
+      .values({ entryId: id, lang, ...row })
+      .onConflictDoUpdate({ target: [translations.entryId, translations.lang], set: row })
     await invalidate()
   },
 

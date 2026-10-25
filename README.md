@@ -65,7 +65,7 @@ docker compose up -d   # api + postgres 18 + valkey + meilisearch，/data 卷放
 
 ## 可选功能
 
-填了环境变量才开：`AI_MODEL` + `AI_GATEWAY_API_KEY`（摘要、翻译、评论审核）、`RESEND_API_KEY`（评论邮件）、`SENTRY_DSN`、`STORAGE=s3`。
+填了才开：AI（摘要、翻译、评论审核）在后台「设置」里配置，供应商用 OpenAI 兼容接口；`RESEND_API_KEY`（评论邮件）、`SENTRY_DSN`、`STORAGE=s3`。
 
 ## 许可证
 

@@ -162,7 +162,9 @@ export const translations = pgTable(
       .references(() => entries.id, { onDelete: "cascade" }),
     lang: text("lang").notNull(),
     title: text("title").notNull(),
+    body: text("body").notNull().default(""), // 译文 Markdown；导入的旧译文只有 html，这里为空
     html: text("html").notNull(),
+    model: text("model"), // 生成译文的模型；手改后为空
     updatedAt: updatedAt(),
   },
   (t) => [primaryKey({ columns: [t.entryId, t.lang] })],
@@ -305,5 +307,25 @@ export const siteSettings = pgTable("site_settings", {
   id: integer("id").primaryKey().default(1),
   value: jsonb("value").$type<SiteSettings>().notNull(),
   likes: integer("likes").notNull().default(0),
+  updatedAt: updatedAt(),
+})
+
+// AI 设置：只有一行（id = 1）
+export type AiSettings = {
+  providers: {
+    id: string
+    name: string
+    endpoint: string
+    apiKey: string
+    defaultModel: string
+    enabled: boolean
+  }[]
+  translation: { enabled: boolean; providerId: string; model: string; languages: string[] }
+  summary: { enabled: boolean; providerId: string; model: string }
+  moderation: { enabled: boolean; providerId: string; model: string }
+}
+export const aiSettings = pgTable("ai_settings", {
+  id: integer("id").primaryKey().default(1),
+  value: jsonb("value").$type<AiSettings>().notNull(),
   updatedAt: updatedAt(),
 })

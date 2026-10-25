@@ -161,3 +161,31 @@ export const siteSettingsInput = z.object({
 export type SiteSettingsInput = z.infer<typeof siteSettingsInput>
 
 export const reaction = z.enum(["up", "down"])
+
+const aiTask = z.object({
+  enabled: z.boolean(),
+  providerId: z.string(),
+  model: z.string(),
+})
+/** AI 设置；供应商的 apiKey 留空表示保持原来的 */
+export const aiSettingsInput = z.object({
+  providers: z.array(
+    z.object({
+      id: z.string().min(1),
+      name: z.string().min(1, "起个名字").max(40),
+      endpoint: httpUrl("接口地址要是 http(s) 网址"),
+      apiKey: z.string().optional(),
+      defaultModel: z.string().min(1, "填默认模型"),
+      enabled: z.boolean(),
+    }),
+  ),
+  translation: aiTask.extend({ languages: z.array(z.string().min(2).max(10)) }),
+  summary: aiTask,
+  moderation: aiTask,
+})
+export type AiSettingsInput = z.infer<typeof aiSettingsInput>
+
+export const translationInput = z.object({
+  title: z.string().min(1, "标题不能空").max(200),
+  body: z.string().min(1, "正文不能空"),
+})
