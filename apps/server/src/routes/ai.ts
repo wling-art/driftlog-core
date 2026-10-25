@@ -17,6 +17,7 @@ const publicSettings = (s: AiSettings) => ({
   providers: s.providers.map(({ apiKey, ...p }) => ({ ...p, hasKey: Boolean(apiKey) })),
 })
 
+const scheduled = new Set(["orphan.scan", "backup"])
 const idLang = z.object({ id: z.coerce.number().int(), lang: z.string().min(2).max(10) })
 
 export const aiRoutes = new Elysia({ prefix: "/admin", tags: ["ai"] })
@@ -220,8 +221,14 @@ export const aiRoutes = new Elysia({ prefix: "/admin", tags: ["ai"] })
         }
       }),
     )
+    const counts = await queue.getJobCounts("active", "failed", "completed")
     return {
-      counts: await queue.getJobCounts("active", "waiting", "delayed", "failed", "completed"),
+      // 排队只算真正等着跑的任务，不含每天定时的扫描和备份
+      counts: {
+        ...counts,
+        queued: rows.filter((r) => (r.state === "waiting" || r.state === "delayed") && !scheduled.has(r.name))
+          .length,
+      },
       jobs: rows
         .filter((r) => r.name === "translate" || r.state === "failed" || r.state === "active")
         .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)),
