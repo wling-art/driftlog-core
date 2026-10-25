@@ -221,11 +221,13 @@ export const aiRoutes = new Elysia({ prefix: "/admin", tags: ["ai"] })
         }
       }),
     )
-    const counts = await queue.getJobCounts("active", "failed", "completed")
+    const n = await queue.getJobCounts("active", "failed", "completed")
     return {
       // 排队只算真正等着跑的任务，不含每天定时的扫描和备份
       counts: {
-        ...counts,
+        active: n.active ?? 0,
+        failed: n.failed ?? 0,
+        completed: n.completed ?? 0,
         queued: rows.filter((r) => (r.state === "waiting" || r.state === "delayed") && !scheduled.has(r.name))
           .length,
       },
