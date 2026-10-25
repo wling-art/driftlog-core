@@ -1,6 +1,7 @@
 {
   "name": "driftlog-core",
   "private": true,
+  "license": "AGPL-3.0-only",
   "workspaces": {
     "packages": [
       "apps/*",
@@ -31,6 +32,5 @@
     "@typescript/native-preview": "catalog:",
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0"
-  },
-  "license": "AGPL-3.0-only"
+  }
 }
