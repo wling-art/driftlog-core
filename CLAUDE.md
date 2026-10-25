@@ -26,6 +26,8 @@ cd apps/server
 MX_DATABASE_URL=postgres://…/mx_core MX_STATIC_DIR=…/mx-space/static DATABASE_URL=postgres://…/driftlog DATA_DIR=… bun src/cli/import-mx.ts
 ```
 
+Rebuild the Meilisearch index (after restoring a DB or first deploy): `bun src/cli/reindex.ts` (needs `MEILI_URL`, `MEILI_KEY`).
+
 After changing the markdown pipeline, re-render stored entries (keeps `updated_at`; translations only store HTML, so they can't be re-rendered):
 
 ```bash
