@@ -30,6 +30,9 @@ export const env = z
     MAIL_FROM: z.string().default("Driftlog <noreply@example.com>"),
     OWNER_EMAIL: optional,
     SENTRY_DSN: optional,
+    /** Umami 统计（服务端事件）：两项都填才发 */
+    UMAMI_URL: optional,
+    UMAMI_WEBSITE_ID: optional,
     LOG_LEVEL: z.string().default("info"),
   })
   // 空值当作没填

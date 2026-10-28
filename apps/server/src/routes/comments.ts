@@ -6,6 +6,7 @@ import { commentInput, commentStatus } from "@driftlog/schema"
 import { renderComment } from "@driftlog/markdown"
 import { db } from "../lib/db"
 import { cached, invalidate, rateLimit } from "../lib/redis"
+import { trackServer } from "../lib/umami"
 import { enqueue } from "../jobs/queue"
 import { authPlugin } from "../auth"
 
@@ -91,6 +92,11 @@ export const commentRoutes = new Elysia({ tags: ["comments"] })
         })
         .returning()
       await enqueue("comment.created", { id: c!.id })
+      trackServer(
+        "comment",
+        { ip, userAgent: request.headers.get("user-agent") },
+        { entryId: body.entryId, reply: Boolean(body.parentId), owner: isOwner },
+      )
       return { ...publicComment(c!), status: c!.status }
     },
     { session: true, body: commentInput },

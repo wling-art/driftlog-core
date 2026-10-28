@@ -19,6 +19,7 @@
     "@elysiajs/openapi": "^1.4.16",
     "@react-email/components": "^1.0.12",
     "@sentry/bun": "^11.0.0",
+    "@umami/node": "^0.4.0",
     "ai": "^7.0.153",
     "better-auth": "^1.7.6",
     "bullmq": "^6.3.9",

@@ -10,6 +10,7 @@ import { log } from "../lib/log"
 import { fetchLinkMeta } from "../lib/linkcard"
 import { extractFileHashes, syncRefs } from "../lib/files"
 import { broadcast } from "../lib/realtime"
+import { trackServer } from "../lib/umami"
 import { enqueue, enqueueTranslate } from "../jobs/queue"
 import { authPlugin } from "../auth"
 import { clientIp } from "./comments"
@@ -221,6 +222,8 @@ export const publicEntries = new Elysia({ prefix: "/entries", tags: ["entries"] 
             .returning({ likes: entries.likes })
         : await db.select({ likes: entries.likes }).from(entries).where(eq(entries.id, params.id))
       if (fresh) await invalidate()
+      if (fresh && e)
+        trackServer("like", { ip, userAgent: request.headers.get("user-agent") }, { entryId: params.id })
       return { likes: e?.likes ?? 0, counted: Boolean(fresh) }
     },
     { params: z.object({ id: z.coerce.number().int() }) },
